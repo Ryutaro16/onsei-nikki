@@ -67,6 +67,15 @@
   .item.ago { border-color:var(--acc); background:var(--acc-bg); }
   .empty { color:var(--sub); text-align:center; padding:30px 0; }
 
+  /* 書き方の切り替え */
+  .styles { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:12px 0 0; }
+  .styles > span { font-size:14px; color:var(--sub); margin-right:2px; }
+  .styles button { min-height:36px; padding:4px 12px; border-radius:18px; font-size:15px; }
+  .styles button.on { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  .styles button.new { border-style:dashed; color:var(--sub); }
+  #readStatus { color:var(--sub); font-size:15px; min-height:1.6em; margin:4px 2px; }
+  #readStatus.err { color:var(--ng); font-weight:700; }
+
   #toast { position:fixed; left:50%; bottom:30px; transform:translateX(-50%); background:#1f2933; color:#fff; padding:10px 18px; border-radius:20px; font-size:15px; opacity:0; transition:opacity .2s; pointer-events:none; }
   #toast.show { opacity:.92; }
   dialog { border:1px solid var(--line); border-radius:14px; padding:16px; max-width:min(92vw, 480px); width:100%; color:var(--ink); background:var(--card); }
@@ -102,6 +111,7 @@
     </div>
     <textarea id="input" placeholder="上の「録音を始める」で話すか、ここをタップしてキーボードの🎤で話してください。&#10;録音した内容は、ここに文字で入ります。"></textarea>
     <div class="hint"><span>「えー」や聞き間違いはそのままでOK(AIが直します)。患者さんの名前は話さないでください。</span><span id="count">0字</span></div>
+    <div class="styles" id="writeStyles"></div>
     <div class="row-btns">
       <button class="main" id="run">日記にする</button>
       <button id="clear">消す</button>
@@ -135,6 +145,8 @@
   <!-- 1日分を読む・直す -->
   <section id="viewRead" hidden>
     <div class="row-btns" style="margin-top:0"><button class="link" id="back">‹ 一覧へ</button></div>
+    <div class="styles" id="readStyles" style="margin:0 0 4px"></div>
+    <div id="readStatus" role="status"></div>
     <div id="readPaper"></div>
     <div id="readEdit" hidden>
       <div class="card">
@@ -182,6 +194,19 @@ const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt
 const mark = (s) => esc(s).replace(/【要確認[^】]*】/g, (m) => `<span class="chk">${m}</span>`);
 const paras = (s) => s.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${mark(p).replace(/\n/g, "<br>")}</p>`).join("");
 
+// 書き方(サーバーの prompt/styles/<id>.md と同じ並び)
+const STYLES = [
+  { id: "kuchou", name: "口調のまま" },
+  { id: "shousetsu", name: "小説風" },
+  { id: "rekkyo", name: "列挙" },
+];
+const styleName = (id) => STYLES.find((s) => s.id === id)?.name || id;
+// 書き方のボタンを並べる。made は作ってある書き方(まだのものは点線で表示)
+function styleButtons(el, current, made, onPick) {
+  el.innerHTML = "<span>書き方</span>" + STYLES.map((s) => `<button data-style="${s.id}" class="${s.id === current ? "on" : made.includes(s.id) ? "" : "new"}">${s.name}</button>`).join("");
+  el.onclick = (ev) => { const b = ev.target.closest("button[data-style]"); if (b && !b.classList.contains("on")) onPick(b.dataset.style); };
+}
+
 // ---- 小さな設定・書きかけ(localStorage)。使えない環境でも動くようにする ----
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -191,13 +216,29 @@ const store = {
 // 音声カルテ・音声メモと同じ住所(ryutaro16.github.io)で保存場所を共有するので、名前に「diary:」を付けて分ける。
 // 合言葉は同じなので、まだ入れていなければ音声メモ・音声カルテで入れたものを使う
 let settings = store.get("diary:settings") || { pass: store.get("memo:settings")?.pass || store.get("settings")?.pass || "", api: "" };
-// 書きかけ:話した内容・話し始めた日時・話し足す日・整えた日記
-const EMPTY = { input: "", startedAt: null, target: null, result: null, meta: "", stt: 0 };
-let draft = { ...EMPTY, ...store.get("diary:draft") };
+// 書きかけ:話した内容・話し始めた日時・話し足す日・選んでいる書き方・書き方ごとに整えた日記と費用
+// 書き方は前回選んだものを使う
+const lastStyle = () => STYLES.some((s) => s.id === store.get("diary:style")) ? store.get("diary:style") : "kuchou";
+const emptyDraft = () => ({ input: "", startedAt: null, target: null, style: lastStyle(), results: {}, metas: {}, stt: 0 });
+let draft = { ...emptyDraft(), ...store.get("diary:draft") };
+// 書き方を付ける前の書きかけ(result 1つ)を引き継ぐ
+if (draft.result) { draft.results = { kuchou: draft.result }; draft.metas = { kuchou: draft.meta || "" }; draft.style = "kuchou"; delete draft.result; delete draft.meta; }
 const saveDraft = () => store.set("diary:draft", draft);
 
 // ---- 日記の保存(IndexedDB)。1日=1件、キーは「2026-10-29」 ----
-// { date, title, body, needs_check, said:[{at, text}], createdAt, updatedAt }
+// { date, style(表示中の書き方), versions:{書き方:{title, body, needs_check}}, said:[{at, text}], createdAt, updatedAt }
+// 書き方を付ける前の形({title, body, needs_check})は「口調のまま」として読む
+function normalize(e) {
+  if (!e || e.versions) return e;
+  const { title, body, needs_check, ...rest } = e;
+  return { ...rest, style: "kuchou", versions: { kuchou: { title: title || "", body: body || "", needs_check: needs_check || [] } } };
+}
+const cur = (e) => e.versions[e.style] || Object.values(e.versions)[0];
+// その日に話した内容を全部まとめる(まだない書き方を作るとき)
+function saidText(saids) {
+  if (saids.length === 1) return saids[0].text;
+  return saids.map((s) => `(${hhmm(s.at)}に話した)\n${s.text}`).join("\n\n");
+}
 const db = new Promise((ok, ng) => {
   const r = indexedDB.open("onsei-nikki", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("entries", { keyPath: "date" });
@@ -213,10 +254,10 @@ async function tx(mode, fn) {
     t.onerror = () => ng(t.error);
   });
 }
-const getEntry = (date) => tx("readonly", (s) => s.get(date));
+const getEntry = async (date) => normalize(await tx("readonly", (s) => s.get(date)));
 const putEntry = (e) => tx("readwrite", (s) => s.put(e));
 const delEntry = (date) => tx("readwrite", (s) => s.delete(date));
-const allEntries = async () => ((await tx("readonly", (s) => s.getAll())) || []).sort((a, b) => b.date.localeCompare(a.date));
+const allEntries = async () => ((await tx("readonly", (s) => s.getAll())) || []).map(normalize).sort((a, b) => b.date.localeCompare(a.date));
 // iPhoneに「この保存は消さないで」と頼む(ホーム画面のアプリなら認められやすい)
 navigator.storage?.persist?.().catch(() => {});
 
@@ -266,18 +307,28 @@ async function renderWrite() {
   $("writeHead").innerHTML = `${esc(jpDate(k))}の日記` + (k === diaryKey(Date.now()) ? "<small>今日</small>" : "");
   // その日の日記がもうあれば、話した内容はそこに話し足す
   $("addInfo").hidden = !existing;
-  $("addInfo").textContent = existing ? `この日の日記「${existing.title}」に話し足します。前の日記に合わせて整え直します。` : "";
+  $("addInfo").textContent = existing ? `この日の日記「${cur(existing).title}」に話し足します。前の日記に合わせて整え直します。` : "";
   input.value = draft.input; $("count").textContent = draft.input.length + "字";
-  const r = draft.result;
+  styleButtons($("writeStyles"), draft.style, Object.keys(draft.results), pickWriteStyle);
+  const r = draft.results[draft.style];
   $("result").hidden = !r;
   if (r) {
     $("rTitle").value = r.title; $("rBody").value = r.body;
     requestAnimationFrame(() => grow($("rBody")));
     $("checks").hidden = !r.needs_check.length;
     $("checks").innerHTML = r.needs_check.length ? `<b>確認してください(${r.needs_check.length}件)</b> 聞き間違いかもしれないところです。直してから保存してください。<ul>${r.needs_check.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
-    $("meta").textContent = draft.meta;
+    $("meta").textContent = draft.metas[draft.style] || "";
   }
   $("run").disabled = recording || busy;
+}
+
+// 書き方を切り替える。もう日記にしたあとなら、その書き方でもすぐ整える(作ってあればそれを見せる)
+function pickWriteStyle(id) {
+  if (busy) return;
+  draft.style = id; store.set("diary:style", id); saveDraft();
+  setStatus("");
+  if (!draft.results[id] && Object.keys(draft.results).length && input.value.trim()) run();
+  else renderWrite();
 }
 
 async function post(path, body) {
@@ -311,15 +362,20 @@ async function withBusy(label, fn) {
 function run() {
   const text = input.value.trim();
   if (!text) { setStatus("話した内容がありません", "err"); return; }
-  withBusy("日記に整えています", async () => {
+  const style = draft.style;
+  withBusy(`${styleName(style)}で日記に整えています`, async () => {
     if (!draft.startedAt) draft.startedAt = Date.now();
     const k = targetKey();
-    const existing = await getEntry(k);
-    const data = await post("/api/write", { text, date: aiDate(k), spoken: aiSpoken(draft.startedAt), existing: existing?.body || "" });
-    draft.result = data.diary;
+    const old = await getEntry(k);
+    // その日の日記がこの書き方であれば、それに話し足す。なければ、その日に話した内容を全部まとめて整える
+    const req = { date: aiDate(k), spoken: aiSpoken(draft.startedAt), style, text, existing: "" };
+    if (old?.versions[style]) req.existing = old.versions[style].body;
+    else if (old) req.text = saidText([...old.said, { at: draft.startedAt, text }]);
+    const data = await post("/api/write", req);
+    draft.results[style] = data.diary;
     // 録音したときは、文字起こし(OpenAI)の費用も並べる
     const stt = draft.stt ? `文字起こし 約${draft.stt.toFixed(1)}円＋` : "";
-    draft.meta = `${stt}整える ${data.label} 約${data.yen.toFixed(1)}円(${data.sec.toFixed(1)}秒)`;
+    draft.metas[style] = `${stt}整える ${data.label} 約${data.yen.toFixed(1)}円(${data.sec.toFixed(1)}秒)`;
     saveDraft();
     setStatus("できました。読んで、よければ保存してください", "ok");
   });
@@ -331,10 +387,12 @@ async function save() {
   const k = targetKey();
   const old = await getEntry(k);
   const now = Date.now();
+  draft.results[draft.style] = { ...draft.results[draft.style], title: title || "(タイトルなし)", body };
   try {
     await putEntry({
-      date: k, title: title || "(タイトルなし)", body,
-      needs_check: draft.result?.needs_check ?? [],
+      date: k, style: draft.style,
+      // 今回整えた書き方だけを残す(ほかの書き方は今回の話が入っていないので、読むときに作り直す)
+      versions: { ...draft.results },
       // 元の話し言葉は、話し足すたびに積み重ねて残す
       said: [...(old?.said || []), { at: draft.startedAt || now, text: draft.input.trim() }],
       createdAt: old?.createdAt || now, updatedAt: now,
@@ -342,7 +400,7 @@ async function save() {
   } catch (e) {
     setStatus("保存できませんでした:" + (e?.message || e), "err"); return;
   }
-  draft = { ...EMPTY }; store.del("diary:draft");
+  draft = emptyDraft(); store.del("diary:draft");
   failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
   setStatus("");
   toast("保存しました");
@@ -351,7 +409,7 @@ async function save() {
 
 function reset() {
   if (recording) return;
-  draft = { ...EMPTY };
+  draft = emptyDraft();
   failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
   store.del("diary:draft"); setStatus(""); renderWrite(); recInfo();
 }
@@ -462,7 +520,7 @@ $("run").onclick = run;
 $("again").onclick = run;
 $("save").onclick = save;
 $("clear").onclick = () => {
-  if ((draft.input || draft.result) && !confirm("話した内容と整えた日記を消します。よろしいですか?(保存済みの日記は消えません)")) return;
+  if ((draft.input || Object.keys(draft.results).length) && !confirm("話した内容と整えた日記を消します。よろしいですか?(保存済みの日記は消えません)")) return;
   reset();
 };
 input.addEventListener("input", () => {
@@ -474,7 +532,8 @@ input.addEventListener("input", () => {
 for (const id of ["rTitle", "rBody"]) {
   $(id).addEventListener("input", (e) => {
     if (e.target.tagName === "TEXTAREA") grow(e.target);
-    if (draft.result) { draft.result = { ...draft.result, title: $("rTitle").value, body: $("rBody").value }; saveDraft(); }
+    const r = draft.results[draft.style];
+    if (r) { draft.results[draft.style] = { ...r, title: $("rTitle").value, body: $("rBody").value }; saveDraft(); }
   });
 }
 
@@ -483,7 +542,8 @@ const lastBackup = () => store.get("diary:lastBackup");
 async function renderList() {
   const all = await allEntries();
   const q = $("search").value.trim();
-  const hit = q ? all.filter((e) => (e.title + "\n" + e.body).includes(q)) : all;
+  // どの書き方の日記でも探す
+  const hit = q ? all.filter((e) => Object.values(e.versions).some((v) => (v.title + "\n" + v.body).includes(q))) : all;
   let html = "";
   // 1年前の今日
   if (!q) {
@@ -507,38 +567,71 @@ async function renderList() {
   if (due) $("noticeExport").onclick = exportBackup;
 }
 function itemHtml(e, cls = "") {
-  const first = e.body.split("\n").find((l) => l.trim()) || "";
-  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b><span>${esc(jpDate(e.date))}</span>${esc(e.title)}</b><small>${esc(first)}</small></button>`;
+  const v = cur(e);
+  const first = v.body.split("\n").find((l) => l.trim() && !l.startsWith("■")) || "";
+  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b><span>${esc(jpDate(e.date))}</span>${esc(v.title)}</b><small>${esc(first)}</small></button>`;
 }
-$("list").addEventListener("click", (ev) => { const b = ev.target.closest(".item"); if (b) { readKey = b.dataset.key; show("read"); } });
+$("list").addEventListener("click", (ev) => { const b = ev.target.closest(".item"); if (b) { readKey = b.dataset.key; setReadStatus(""); show("read"); } });
 $("search").addEventListener("input", renderList);
 
 // ---- 1日分を読む・直す ----
+let readBusy = false;
+function setReadStatus(msg, cls = "") { const s = $("readStatus"); s.textContent = msg; s.className = cls; }
 async function renderRead() {
   const e = await getEntry(readKey);
   if (!e) { show("list"); return; }
   $("readEdit").hidden = true; $("readPaper").hidden = false; $("readBtns").hidden = false;
+  styleButtons($("readStyles"), e.style, Object.keys(e.versions), pickReadStyle);
+  const v = cur(e);
   const saids = e.said.map((s) => `<div class="said"><small>${esc(jpDate(diaryKey(s.at)) === jpDate(e.date) ? "" : jpDate(keyOf(new Date(s.at))) + " ")}${hhmm(s.at)} に話した</small>${esc(s.text)}</div>`).join("");
-  $("readPaper").innerHTML = `<div class="paper"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(e.title)}</div>${paras(e.body)}
+  $("readPaper").innerHTML = `<div class="paper"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(v.title)}</div>${paras(v.body)}
     <details><summary>元の話し言葉(${e.said.length}回分)</summary>${saids}</details></div>`;
 }
-$("edit").onclick = async () => {
+// 保存した日記の書き方を切り替える。まだ作っていない書き方は、その日に話した内容全部から作って残す
+async function pickReadStyle(id) {
+  if (readBusy) return;
   const e = await getEntry(readKey);
-  $("eTitle").value = e.title; $("eBody").value = e.body;
+  if (e.versions[id]) { await putEntry({ ...e, style: id }); setReadStatus(""); renderRead(); return; }
+  if (!e.said.length) { setReadStatus("元の話し言葉がないので、この書き方は作れません", "err"); return; }
+  readBusy = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => setReadStatus(`${styleName(id)}で整えています… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  setReadStatus(`${styleName(id)}で整えています…`);
+  try {
+    const last = e.said[e.said.length - 1].at;
+    const data = await post("/api/write", { style: id, date: aiDate(e.date), spoken: aiSpoken(last), text: saidText(e.said), existing: "" });
+    const now = await getEntry(readKey);
+    await putEntry({ ...now, style: id, versions: { ...now.versions, [id]: data.diary } });
+    clearInterval(tick);
+    setReadStatus(`${styleName(id)}を作りました(約${data.yen.toFixed(1)}円)。次からは切り替えるだけで読めます`);
+    if (view === "read" && readKey === now.date) renderRead();
+  } catch (err) {
+    clearInterval(tick);
+    setReadStatus(err.message, "err");
+  } finally { readBusy = false; }
+}
+$("edit").onclick = async () => {
+  const v = cur(await getEntry(readKey));
+  $("eTitle").value = v.title; $("eBody").value = v.body;
   $("readPaper").hidden = true; $("readBtns").hidden = true; $("readEdit").hidden = false;
   requestAnimationFrame(() => grow($("eBody")));
 };
 $("eBody").addEventListener("input", (e) => grow(e.target));
 $("eCancel").onclick = renderRead;
+// 表示している書き方の日記だけを直す
 $("eSave").onclick = async () => {
   const e = await getEntry(readKey);
-  await putEntry({ ...e, title: $("eTitle").value.trim() || e.title, body: $("eBody").value.trim() || e.body, updatedAt: Date.now() });
+  const v = cur(e);
+  const fixed = { ...v, title: $("eTitle").value.trim() || v.title, body: $("eBody").value.trim() || v.body };
+  await putEntry({ ...e, versions: { ...e.versions, [e.style]: fixed }, updatedAt: Date.now() });
   toast("保存しました"); renderRead();
 };
-$("addMore").onclick = () => {
-  if ((draft.input || draft.result) && targetKey() !== readKey && !confirm("書きかけの話した内容があります。消して、この日の日記に話し足しますか?")) return;
-  if (targetKey() !== readKey) draft = { ...EMPTY };
-  draft.target = readKey; saveDraft();
+$("addMore").onclick = async () => {
+  if ((draft.input || Object.keys(draft.results).length) && targetKey() !== readKey && !confirm("書きかけの話した内容があります。消して、この日の日記に話し足しますか?")) return;
+  if (targetKey() !== readKey) draft = emptyDraft();
+  // 話し足しは、いま読んでいる書き方で整える
+  draft.target = readKey; draft.style = (await getEntry(readKey)).style; saveDraft();
+  setReadStatus("");
   show("write");
 };
 $("del").onclick = async () => {
@@ -551,7 +644,7 @@ async function exportBackup() {
   const all = await allEntries();
   if (!all.length) { toast("まだ日記がありません"); return; }
   const name = `音声日記-バックアップ-${keyOf(new Date()).replace(/-/g, "")}.json`;
-  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 1, exportedAt: new Date().toISOString(), entries: all }, null, 1)], name, { type: "application/json" });
+  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 2, exportedAt: new Date().toISOString(), entries: all }, null, 1)], name, { type: "application/json" });
   // iPhoneは共有シートで「ファイルに保存」できる。使えなければダウンロード
   if (navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); }
@@ -571,11 +664,19 @@ async function importBackup(f) {
   if (data?.app !== "onsei-nikki" || !Array.isArray(data.entries)) { toast("音声日記のバックアップではありません"); return; }
   // 同じ日の日記があれば、新しく直したほうを残す
   let added = 0, kept = 0;
-  for (const e of data.entries) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(e?.date) || typeof e.body !== "string") continue;
-    const cur = await getEntry(e.date);
-    if (cur && (cur.updatedAt || 0) >= (e.updatedAt || 0)) { kept++; continue; }
-    await putEntry({ date: e.date, title: String(e.title || ""), body: e.body, needs_check: e.needs_check || [], said: e.said || [], createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
+  for (const raw of data.entries) {
+    // 書き方を付ける前のバックアップ(version 1)も読めるようにそろえる
+    const e = normalize(raw);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e?.date) || !e.versions || typeof cur(e)?.body !== "string") continue;
+    const here = await getEntry(e.date);
+    if (here && (here.updatedAt || 0) >= (e.updatedAt || 0)) { kept++; continue; }
+    const versions = {};
+    for (const s of STYLES) {
+      const v = e.versions[s.id];
+      if (v && typeof v.body === "string") versions[s.id] = { title: String(v.title || ""), body: v.body, needs_check: Array.isArray(v.needs_check) ? v.needs_check : [] };
+    }
+    if (!Object.keys(versions).length) continue;
+    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
     added++;
   }
   toast(`${added}日分を読み込みました${kept ? `(${kept}日分はこのiPhoneのほうが新しいので残しました)` : ""}`);
