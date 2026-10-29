@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="音声日記">
+<title>音声日記</title>
+<style>
+  :root { --ink:#1f2933; --sub:#5b6773; --line:#d9dee3; --bg:#f6f7f9; --card:#fff; --paper:#fffdf8; --acc:#7a4fb5; --acc-ink:#fff; --acc-bg:#f4effb; --note-bg:#fff8e1; --note-line:#f0d98a; --ok:#1e7d4f; --ng:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif; color:var(--ink); background:var(--bg); line-height:1.6; font-size:17px; -webkit-text-size-adjust:100%; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px 48px; padding-top:max(12px, env(safe-area-inset-top)); }
+  header { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; }
+  .tabs { display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:3px; }
+  .tabs button { border:none; min-height:38px; padding:6px 14px; border-radius:9px; background:none; color:var(--sub); }
+  .tabs button.on { background:var(--acc); color:var(--acc-ink); font-weight:700; }
+  button { font:inherit; color:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:var(--card); padding:10px 16px; min-height:44px; }
+  button.main { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  button:disabled { opacity:.45; cursor:default; }
+  .link { border:none; background:none; color:var(--sub); padding:8px; font-size:15px; }
+  textarea, input { width:100%; font:inherit; font-size:17px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; line-height:1.6; }
+  textarea { resize:vertical; }
+  #input { min-height:min(30vh, 280px); }
+  h2 { font-size:19px; margin:4px 2px 10px; }
+  h2 small { font-size:14px; font-weight:400; color:var(--sub); margin-left:6px; }
+  .hint { color:var(--sub); font-size:14px; display:flex; justify-content:space-between; gap:8px; margin:4px 2px 0; }
+  #count { white-space:nowrap; }
+  .rec-box { margin-bottom:10px; }
+  .rec-box .row-btns { margin:0 0 6px; }
+  button.rec { flex:1; background:#c0392b; border-color:#c0392b; color:#fff; font-weight:700; min-height:56px; font-size:18px; }
+  button.rec.on { background:#fff; color:#c0392b; animation:blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity:.6; } }
+  .row-btns { display:flex; gap:10px; margin:12px 0; flex-wrap:wrap; }
+  .row-btns .main { flex:1; }
+  #status { color:var(--sub); font-size:15px; min-height:1.6em; }
+  #status.err { color:var(--ng); font-weight:700; }
+  #status.ok { color:var(--ok); font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .lbl { font-size:13px; font-weight:700; color:var(--sub); margin:12px 2px 4px; }
+  .lbl:first-child { margin-top:0; }
+  #rTitle { font-size:19px; font-weight:700; }
+  .notice { background:var(--note-bg); border:1px solid var(--note-line); border-radius:10px; padding:10px 12px; margin:0 0 10px; font-size:15px; }
+  .notice ul { margin:4px 0 0; padding-left:1.2em; }
+  .notice button { margin-top:8px; min-height:38px; padding:6px 12px; }
+  .info { background:var(--acc-bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:15px; }
+  .meta { color:var(--sub); font-size:13px; margin-top:6px; text-align:right; }
+  .chk { background:var(--note-bg); border-radius:3px; }
+
+  /* 日記を読む */
+  .paper { background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .paper .d { color:var(--sub); font-size:14px; }
+  .paper .t { font-size:20px; font-weight:700; margin:2px 0 10px; }
+  .paper p { margin:0 0 12px; }
+  details { margin-top:12px; color:var(--sub); font-size:15px; }
+  details summary { cursor:pointer; padding:6px 0; }
+  .said { white-space:pre-wrap; border-left:3px solid var(--line); padding-left:10px; margin:6px 0 12px; }
+  .said small { display:block; font-size:12px; }
+
+  /* 一覧 */
+  #search { margin-bottom:10px; }
+  .month { font-size:14px; font-weight:700; color:var(--sub); margin:16px 2px 6px; }
+  .item { display:block; width:100%; text-align:left; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:0 0 6px; min-height:0; }
+  .item b { display:block; font-size:16px; }
+  .item b span { font-weight:400; color:var(--sub); font-size:14px; margin-right:6px; }
+  .item small { display:block; color:var(--sub); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item.ago { border-color:var(--acc); background:var(--acc-bg); }
+  .empty { color:var(--sub); text-align:center; padding:30px 0; }
+
+  #toast { position:fixed; left:50%; bottom:30px; transform:translateX(-50%); background:#1f2933; color:#fff; padding:10px 18px; border-radius:20px; font-size:15px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:.92; }
+  dialog { border:1px solid var(--line); border-radius:14px; padding:16px; max-width:min(92vw, 480px); width:100%; color:var(--ink); background:var(--card); }
+  dialog label { display:block; font-size:15px; margin:10px 0 4px; }
+  dialog .muted { color:var(--sub); font-size:13px; }
+  dialog hr { border:none; border-top:1px solid var(--line); margin:16px 0 8px; }
+  [hidden] { display:none !important; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e6e9ec; --sub:#9aa5b1; --line:#3a424a; --bg:#15191d; --card:#1f252b; --paper:#23262b; --acc:#a07ad6; --acc-bg:#2a2335; --note-bg:#3a3320; --note-line:#6b5a2a; --ok:#5cc98f; --ng:#ff7b6b; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="tabs">
+      <button id="tabWrite" class="on">話す</button>
+      <button id="tabList">日記</button>
+    </div>
+    <button class="link" id="openSettings">⚙ 設定</button>
+  </header>
+
+  <!-- 話す → 日記にする → 保存 -->
+  <section id="viewWrite">
+    <h2 id="writeHead"></h2>
+    <div class="info" id="addInfo" hidden></div>
+    <div class="rec-box">
+      <div class="row-btns">
+        <button id="recBtn" class="rec">● 録音を始める</button>
+        <button id="retryBtn" hidden>文字起こしをやり直す</button>
+      </div>
+      <div id="recStatus" class="hint">黙っていても止まりません。止めると自動で文字にして日記に整えます。</div>
+    </div>
+    <textarea id="input" placeholder="上の「録音を始める」で話すか、ここをタップしてキーボードの🎤で話してください。&#10;録音した内容は、ここに文字で入ります。"></textarea>
+    <div class="hint"><span>「えー」や聞き間違いはそのままでOK(AIが直します)。患者さんの名前は話さないでください。</span><span id="count">0字</span></div>
+    <div class="row-btns">
+      <button class="main" id="run">日記にする</button>
+      <button id="clear">消す</button>
+    </div>
+    <div id="status" role="status"></div>
+
+    <section id="result" hidden>
+      <div class="notice" id="checks" hidden></div>
+      <div class="card">
+        <div class="lbl">タイトル</div>
+        <input id="rTitle">
+        <div class="lbl">日記</div>
+        <textarea id="rBody" rows="10"></textarea>
+      </div>
+      <div class="meta" id="meta"></div>
+      <div class="row-btns">
+        <button class="main" id="save">保存</button>
+        <button id="again">もう一度整える</button>
+      </div>
+      <div class="hint"><span>欄の中は直接直せます。直してから保存してください。</span></div>
+    </section>
+  </section>
+
+  <!-- 一覧 -->
+  <section id="viewList" hidden>
+    <div class="notice" id="backupNotice" hidden></div>
+    <input id="search" type="search" placeholder="🔍 キーワードで探す">
+    <div id="list"></div>
+  </section>
+
+  <!-- 1日分を読む・直す -->
+  <section id="viewRead" hidden>
+    <div class="row-btns" style="margin-top:0"><button class="link" id="back">‹ 一覧へ</button></div>
+    <div id="readPaper"></div>
+    <div id="readEdit" hidden>
+      <div class="card">
+        <div class="lbl">タイトル</div>
+        <input id="eTitle">
+        <div class="lbl">日記</div>
+        <textarea id="eBody" rows="12"></textarea>
+      </div>
+      <div class="row-btns"><button class="main" id="eSave">直した内容を保存</button><button id="eCancel">やめる</button></div>
+    </div>
+    <div class="row-btns" id="readBtns">
+      <button class="main" id="addMore">話し足す</button>
+      <button id="edit">直す</button>
+      <button id="del">消す</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <b>設定</b>
+  <label for="pass">合言葉</label>
+  <input id="pass" type="password" autocomplete="off">
+  <label for="api">中継サーバーのURL</label>
+  <input id="api" type="url" placeholder="ふつうは空欄のまま">
+  <div class="row-btns"><button class="main" id="saveSettings">保存</button><button id="closeSettings">閉じる</button></div>
+  <hr>
+  <b>バックアップ</b>
+  <p class="muted" id="backupInfo"></p>
+  <div class="row-btns">
+    <button id="exportBtn">書き出す</button>
+    <button id="importBtn">読み込む</button>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
+  <p class="muted">日記はこのiPhoneの中だけに保存しています。機種変更やSafariの「履歴とWebサイトデータを消去」で消えるので、ときどき書き出して「ファイル」アプリ(iCloud Drive)に残してください。</p>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+// 公開版(GitHub Pages)は Cloudflare の中継サーバーへ、Macの試作はこのページと同じ場所へ
+const DEFAULT_API = location.hostname.endsWith("github.io") ? "https://onsei-nikki.kinmon-push.workers.dev" : "";
+const $ = (id) => document.getElementById(id);
+const input = $("input");
+const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+const mark = (s) => esc(s).replace(/【要確認[^】]*】/g, (m) => `<span class="chk">${m}</span>`);
+const paras = (s) => s.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${mark(p).replace(/\n/g, "<br>")}</p>`).join("");
+
+// ---- 小さな設定・書きかけ(localStorage)。使えない環境でも動くようにする ----
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+// 音声カルテ・音声メモと同じ住所(ryutaro16.github.io)で保存場所を共有するので、名前に「diary:」を付けて分ける。
+// 合言葉は同じなので、まだ入れていなければ音声メモ・音声カルテで入れたものを使う
+let settings = store.get("diary:settings") || { pass: store.get("memo:settings")?.pass || store.get("settings")?.pass || "", api: "" };
+// 書きかけ:話した内容・話し始めた日時・話し足す日・整えた日記
+const EMPTY = { input: "", startedAt: null, target: null, result: null, meta: "", stt: 0 };
+let draft = { ...EMPTY, ...store.get("diary:draft") };
+const saveDraft = () => store.set("diary:draft", draft);
+
+// ---- 日記の保存(IndexedDB)。1日=1件、キーは「2026-10-29」 ----
+// { date, title, body, needs_check, said:[{at, text}], createdAt, updatedAt }
+const db = new Promise((ok, ng) => {
+  const r = indexedDB.open("onsei-nikki", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("entries", { keyPath: "date" });
+  r.onsuccess = () => ok(r.result);
+  r.onerror = () => ng(r.error);
+});
+async function tx(mode, fn) {
+  const d = await db;
+  return new Promise((ok, ng) => {
+    const t = d.transaction("entries", mode);
+    const req = fn(t.objectStore("entries"));
+    t.oncomplete = () => ok(req?.result);
+    t.onerror = () => ng(t.error);
+  });
+}
+const getEntry = (date) => tx("readonly", (s) => s.get(date));
+const putEntry = (e) => tx("readwrite", (s) => s.put(e));
+const delEntry = (date) => tx("readwrite", (s) => s.delete(date));
+const allEntries = async () => ((await tx("readonly", (s) => s.getAll())) || []).sort((a, b) => b.date.localeCompare(a.date));
+// iPhoneに「この保存は消さないで」と頼む(ホーム画面のアプリなら認められやすい)
+navigator.storage?.persist?.().catch(() => {});
+
+// ---- 日付 ----
+const WEEK = "日月火水木金土";
+const pad = (n) => String(n).padStart(2, "0");
+const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateOfKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+// 夜中0時〜朝4時に話したら、前の日の日記にする
+function diaryKey(ms) { const d = new Date(ms); if (d.getHours() < 4) d.setDate(d.getDate() - 1); return keyOf(d); }
+const aiDate = (k) => `${k}(${WEEK[dateOfKey(k).getDay()]})`;
+const aiSpoken = (ms) => { const d = new Date(ms); return `${aiDate(keyOf(d))} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const jpDate = (k) => { const d = dateOfKey(k); return `${d.getMonth() + 1}月${d.getDate()}日（${WEEK[d.getDay()]}）`; };
+const jpDateY = (k) => `${dateOfKey(k).getFullYear()}年${jpDate(k)}`;
+const hhmm = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+// 書きかけがどの日の日記か(話し足しの日 → 話し始めた日時 → 今)
+const targetKey = () => draft.target || diaryKey(draft.startedAt || Date.now());
+
+// ---- 画面の切り替え ----
+let view = "write", readKey = null;
+function show(v) {
+  view = v;
+  $("viewWrite").hidden = v !== "write"; $("viewList").hidden = v !== "list"; $("viewRead").hidden = v !== "read";
+  $("tabWrite").classList.toggle("on", v === "write"); $("tabList").classList.toggle("on", v === "list" || v === "read");
+  if (v === "write") renderWrite();
+  if (v === "list") renderList();
+  if (v === "read") renderRead();
+  window.scrollTo(0, 0);
+}
+$("tabWrite").onclick = () => show("write");
+$("tabList").onclick = () => show("list");
+$("back").onclick = () => show("list");
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 1600);
+}
+function setStatus(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = cls; }
+
+// ---- 話す画面 ----
+function grow(t) { if (!t.offsetWidth) return; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
+window.addEventListener("resize", () => { grow($("rBody")); grow($("eBody")); });
+
+async function renderWrite() {
+  const k = targetKey();
+  const existing = await getEntry(k);
+  $("writeHead").innerHTML = `${esc(jpDate(k))}の日記` + (k === diaryKey(Date.now()) ? "<small>今日</small>" : "");
+  // その日の日記がもうあれば、話した内容はそこに話し足す
+  $("addInfo").hidden = !existing;
+  $("addInfo").textContent = existing ? `この日の日記「${existing.title}」に話し足します。前の日記に合わせて整え直します。` : "";
+  input.value = draft.input; $("count").textContent = draft.input.length + "字";
+  const r = draft.result;
+  $("result").hidden = !r;
+  if (r) {
+    $("rTitle").value = r.title; $("rBody").value = r.body;
+    requestAnimationFrame(() => grow($("rBody")));
+    $("checks").hidden = !r.needs_check.length;
+    $("checks").innerHTML = r.needs_check.length ? `<b>確認してください(${r.needs_check.length}件)</b> 聞き間違いかもしれないところです。直してから保存してください。<ul>${r.needs_check.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+    $("meta").textContent = draft.meta;
+  }
+  $("run").disabled = recording || busy;
+}
+
+async function post(path, body) {
+  let res;
+  try {
+    res = await fetch((settings.api || DEFAULT_API).replace(/\/$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Passphrase": settings.pass || "" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("サーバーにつながりません。通信状態と設定を確認してください");
+  }
+  const data = await res.json().catch(() => ({ error: `サーバーの応答を読めませんでした(${res.status})` }));
+  if (!res.ok || data.error) throw new Error(data.error || `エラー(${res.status})`);
+  return data;
+}
+
+let busy = false;
+async function withBusy(label, fn) {
+  if (busy) return;
+  busy = true; for (const id of ["run", "again", "save"]) $(id).disabled = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => setStatus(`${label}… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  setStatus(`${label}…`);
+  try { await fn(); }
+  catch (e) { setStatus(e.message, "err"); }
+  finally { clearInterval(tick); busy = false; for (const id of ["again", "save"]) $(id).disabled = false; if (view === "write") renderWrite(); if ($("status").className === "") setStatus(""); }
+}
+
+function run() {
+  const text = input.value.trim();
+  if (!text) { setStatus("話した内容がありません", "err"); return; }
+  withBusy("日記に整えています", async () => {
+    if (!draft.startedAt) draft.startedAt = Date.now();
+    const k = targetKey();
+    const existing = await getEntry(k);
+    const data = await post("/api/write", { text, date: aiDate(k), spoken: aiSpoken(draft.startedAt), existing: existing?.body || "" });
+    draft.result = data.diary;
+    // 録音したときは、文字起こし(OpenAI)の費用も並べる
+    const stt = draft.stt ? `文字起こし 約${draft.stt.toFixed(1)}円＋` : "";
+    draft.meta = `${stt}整える ${data.label} 約${data.yen.toFixed(1)}円(${data.sec.toFixed(1)}秒)`;
+    saveDraft();
+    setStatus("できました。読んで、よければ保存してください", "ok");
+  });
+}
+
+async function save() {
+  const title = $("rTitle").value.trim(), body = $("rBody").value.trim();
+  if (!body) { setStatus("日記が空です", "err"); return; }
+  const k = targetKey();
+  const old = await getEntry(k);
+  const now = Date.now();
+  try {
+    await putEntry({
+      date: k, title: title || "(タイトルなし)", body,
+      needs_check: draft.result?.needs_check ?? [],
+      // 元の話し言葉は、話し足すたびに積み重ねて残す
+      said: [...(old?.said || []), { at: draft.startedAt || now, text: draft.input.trim() }],
+      createdAt: old?.createdAt || now, updatedAt: now,
+    });
+  } catch (e) {
+    setStatus("保存できませんでした:" + (e?.message || e), "err"); return;
+  }
+  draft = { ...EMPTY }; store.del("diary:draft");
+  failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
+  setStatus("");
+  toast("保存しました");
+  readKey = k; show("read");
+}
+
+function reset() {
+  if (recording) return;
+  draft = { ...EMPTY };
+  failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
+  store.del("diary:draft"); setStatus(""); renderWrite(); recInfo();
+}
+
+// ---- 録音(音声メモアプリと同じ作り)。無音でも止まらない。1分ごとに区切って文字起こしに送る ----
+const SEGMENT_MS = 60 * 1000;
+let recording = false, stream = null, recorder = null, segTimer = null, clock = null, wakeLock = null, recStart = 0;
+let queue = [], failed = [], sending = false, doneCount = 0, summarizeWhenDone = false;
+
+function pickType() {
+  for (const t of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"]) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+  return "";
+}
+const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+function recInfo() {
+  const parts = [];
+  if (recording) parts.push(`● 録音中 ${mmss(Date.now() - recStart)}`);
+  if (doneCount) parts.push(`文字にした区切り ${doneCount}本`);
+  if (sending || queue.length) parts.push("文字起こし中…");
+  if (failed.length) parts.push(`失敗 ${failed.length}本`);
+  $("recStatus").textContent = parts.length ? parts.join("・") : "黙っていても止まりません。止めると自動で文字にして日記に整えます。";
+}
+
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => { if (recording && document.visibilityState === "visible") keepAwake(); });
+
+function startSegment() {
+  const type = pickType();
+  const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const parts = [];
+  r.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+  r.onstop = () => { if (parts.length) { queue.push(new Blob(parts, { type: r.mimeType || type })); sendQueue(); } };
+  r.start();
+  recorder = r;
+}
+
+async function startRecording() {
+  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { setStatus("この画面では録音できません。Safariのタブで開いてください", "err"); return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch {
+    setStatus("マイクを使えませんでした。マイクの使用を許可してください", "err"); return;
+  }
+  recording = true; recStart = Date.now(); summarizeWhenDone = false;
+  if (!draft.startedAt) { draft.startedAt = recStart; saveDraft(); renderWrite(); }
+  $("recBtn").textContent = "■ 録音を止めて日記にする"; $("recBtn").classList.add("on");
+  $("run").disabled = true; setStatus("");
+  startSegment();
+  segTimer = setInterval(() => { recorder.stop(); startSegment(); }, SEGMENT_MS);
+  clock = setInterval(recInfo, 1000);
+  keepAwake(); recInfo();
+}
+
+function stopRecording() {
+  clearInterval(segTimer); clearInterval(clock);
+  recording = false; summarizeWhenDone = true;
+  recorder?.stop();
+  stream?.getTracks().forEach((t) => t.stop());
+  wakeLock?.release?.(); wakeLock = null;
+  $("recBtn").textContent = "● 録音を始める"; $("recBtn").classList.remove("on");
+  $("run").disabled = false;
+  recInfo(); maybeSummarize();
+}
+$("recBtn").onclick = () => (recording ? stopRecording() : startRecording());
+
+// 区切りを順番に送る。失敗したらそこで止めて、順番が入れ替わらないようにする
+async function sendQueue() {
+  if (sending || failed.length) return;
+  sending = true; recInfo();
+  while (queue.length) {
+    const blob = queue[0];
+    let data = null, err = "";
+    for (let i = 0; i < 3 && !data; i++) {
+      try {
+        const res = await fetch((settings.api || DEFAULT_API).replace(/\/$/, "") + "/api/transcribe", {
+          method: "POST", headers: { "Content-Type": blob.type.split(";")[0], "X-Passphrase": settings.pass || "" }, body: blob,
+        });
+        const d = await res.json().catch(() => ({ error: `サーバーの応答を読めませんでした(${res.status})` }));
+        if (!res.ok || d.error) { err = d.error || `エラー(${res.status})`; if (res.status < 500) break; }
+        else data = d;
+      } catch { err = "サーバーにつながりません"; }
+      if (!data && i < 2) await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+    }
+    queue.shift();
+    if (!data) { failed.push(blob, ...queue); queue = []; $("retryBtn").hidden = false; setStatus("文字起こしに失敗しました:" + err, "err"); break; }
+    if (data.text) {
+      draft.input += (draft.input && !draft.input.endsWith("\n") ? "\n" : "") + data.text;
+      input.value = draft.input; $("count").textContent = draft.input.length + "字";
+    }
+    doneCount++; draft.stt = (draft.stt || 0) + (data.yen || 0); saveDraft();
+    recInfo();
+  }
+  sending = false; recInfo(); maybeSummarize();
+}
+$("retryBtn").onclick = () => { queue = failed.concat(queue); failed = []; $("retryBtn").hidden = true; setStatus(""); sendQueue(); };
+
+// 録音を止めて、全部の区切りが文字になったら、そのまま日記に整える
+function maybeSummarize() {
+  if (summarizeWhenDone && !recording && !sending && !queue.length && !failed.length) {
+    summarizeWhenDone = false;
+    if (input.value.trim()) run(); else setStatus("聞き取れませんでした。もう一度録音してください", "err");
+  }
+}
+
+$("run").onclick = run;
+$("again").onclick = run;
+$("save").onclick = save;
+$("clear").onclick = () => {
+  if ((draft.input || draft.result) && !confirm("話した内容と整えた日記を消します。よろしいですか?(保存済みの日記は消えません)")) return;
+  reset();
+};
+input.addEventListener("input", () => {
+  // 話し始めた日時で、どの日の日記かを決める
+  if (!draft.startedAt && input.value) { draft.startedAt = Date.now(); renderWrite(); }
+  if (!input.value && !draft.target) draft.startedAt = null;
+  draft.input = input.value; $("count").textContent = input.value.length + "字"; saveDraft();
+});
+for (const id of ["rTitle", "rBody"]) {
+  $(id).addEventListener("input", (e) => {
+    if (e.target.tagName === "TEXTAREA") grow(e.target);
+    if (draft.result) { draft.result = { ...draft.result, title: $("rTitle").value, body: $("rBody").value }; saveDraft(); }
+  });
+}
+
+// ---- 一覧 ----
+const lastBackup = () => store.get("diary:lastBackup");
+async function renderList() {
+  const all = await allEntries();
+  const q = $("search").value.trim();
+  const hit = q ? all.filter((e) => (e.title + "\n" + e.body).includes(q)) : all;
+  let html = "";
+  // 1年前の今日
+  if (!q) {
+    const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+    const ago = all.find((e) => e.date === keyOf(d));
+    if (ago) html += `<div class="month">1年前の今日</div>${itemHtml(ago, "ago")}`;
+  }
+  let month = "";
+  for (const e of hit) {
+    const m = `${dateOfKey(e.date).getFullYear()}年${dateOfKey(e.date).getMonth() + 1}月`;
+    if (m !== month) { month = m; html += `<div class="month">${m}</div>`; }
+    html += itemHtml(e);
+  }
+  if (!hit.length) html = `<div class="empty">${q ? "見つかりませんでした" : "まだ日記がありません。「話す」から今日のことを話してください。"}</div>`;
+  $("list").innerHTML = html;
+  // 最後の書き出しから30日たったら知らせる
+  const lb = lastBackup();
+  const due = all.length && (!lb || Date.now() - lb > 30 * 864e5);
+  $("backupNotice").hidden = !due;
+  $("backupNotice").innerHTML = due ? `<b>バックアップを書き出しましょう</b><br>${lb ? `最後の書き出しは${Math.floor((Date.now() - lb) / 864e5)}日前です。` : "まだ一度も書き出していません。"}日記はこのiPhoneの中だけにあります。<br><button id="noticeExport">今すぐ書き出す</button>` : "";
+  if (due) $("noticeExport").onclick = exportBackup;
+}
+function itemHtml(e, cls = "") {
+  const first = e.body.split("\n").find((l) => l.trim()) || "";
+  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b><span>${esc(jpDate(e.date))}</span>${esc(e.title)}</b><small>${esc(first)}</small></button>`;
+}
+$("list").addEventListener("click", (ev) => { const b = ev.target.closest(".item"); if (b) { readKey = b.dataset.key; show("read"); } });
+$("search").addEventListener("input", renderList);
+
+// ---- 1日分を読む・直す ----
+async function renderRead() {
+  const e = await getEntry(readKey);
+  if (!e) { show("list"); return; }
+  $("readEdit").hidden = true; $("readPaper").hidden = false; $("readBtns").hidden = false;
+  const saids = e.said.map((s) => `<div class="said"><small>${esc(jpDate(diaryKey(s.at)) === jpDate(e.date) ? "" : jpDate(keyOf(new Date(s.at))) + " ")}${hhmm(s.at)} に話した</small>${esc(s.text)}</div>`).join("");
+  $("readPaper").innerHTML = `<div class="paper"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(e.title)}</div>${paras(e.body)}
+    <details><summary>元の話し言葉(${e.said.length}回分)</summary>${saids}</details></div>`;
+}
+$("edit").onclick = async () => {
+  const e = await getEntry(readKey);
+  $("eTitle").value = e.title; $("eBody").value = e.body;
+  $("readPaper").hidden = true; $("readBtns").hidden = true; $("readEdit").hidden = false;
+  requestAnimationFrame(() => grow($("eBody")));
+};
+$("eBody").addEventListener("input", (e) => grow(e.target));
+$("eCancel").onclick = renderRead;
+$("eSave").onclick = async () => {
+  const e = await getEntry(readKey);
+  await putEntry({ ...e, title: $("eTitle").value.trim() || e.title, body: $("eBody").value.trim() || e.body, updatedAt: Date.now() });
+  toast("保存しました"); renderRead();
+};
+$("addMore").onclick = () => {
+  if ((draft.input || draft.result) && targetKey() !== readKey && !confirm("書きかけの話した内容があります。消して、この日の日記に話し足しますか?")) return;
+  if (targetKey() !== readKey) draft = { ...EMPTY };
+  draft.target = readKey; saveDraft();
+  show("write");
+};
+$("del").onclick = async () => {
+  if (!confirm(`${jpDate(readKey)}の日記を消します。元に戻せません。よろしいですか?`)) return;
+  await delEntry(readKey); toast("消しました"); show("list");
+};
+
+// ---- バックアップ(書き出し・読み込み) ----
+async function exportBackup() {
+  const all = await allEntries();
+  if (!all.length) { toast("まだ日記がありません"); return; }
+  const name = `音声日記-バックアップ-${keyOf(new Date()).replace(/-/g, "")}.json`;
+  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 1, exportedAt: new Date().toISOString(), entries: all }, null, 1)], name, { type: "application/json" });
+  // iPhoneは共有シートで「ファイルに保存」できる。使えなければダウンロード
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); }
+    catch (e) { if (e.name === "AbortError") return; toast("書き出せませんでした"); return; }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  store.set("diary:lastBackup", Date.now());
+  toast(`${all.length}日分を書き出しました`);
+  renderBackupInfo(); if (view === "list") renderList();
+}
+async function importBackup(f) {
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { toast("読めないファイルです"); return; }
+  if (data?.app !== "onsei-nikki" || !Array.isArray(data.entries)) { toast("音声日記のバックアップではありません"); return; }
+  // 同じ日の日記があれば、新しく直したほうを残す
+  let added = 0, kept = 0;
+  for (const e of data.entries) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e?.date) || typeof e.body !== "string") continue;
+    const cur = await getEntry(e.date);
+    if (cur && (cur.updatedAt || 0) >= (e.updatedAt || 0)) { kept++; continue; }
+    await putEntry({ date: e.date, title: String(e.title || ""), body: e.body, needs_check: e.needs_check || [], said: e.said || [], createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
+    added++;
+  }
+  toast(`${added}日分を読み込みました${kept ? `(${kept}日分はこのiPhoneのほうが新しいので残しました)` : ""}`);
+  if (view === "list") renderList();
+}
+async function renderBackupInfo() {
+  const n = (await allEntries()).length, lb = lastBackup();
+  const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  $("backupInfo").textContent = `日記 ${n}日分/最後の書き出し:${lb ? new Date(lb).toLocaleDateString("ja-JP") : "まだ"}${persisted ? "/消さない設定:済み" : ""}`;
+}
+$("exportBtn").onclick = exportBackup;
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
+
+$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; renderBackupInfo(); $("settings").showModal(); };
+$("closeSettings").onclick = () => $("settings").close();
+$("saveSettings").onclick = () => { settings = { pass: $("pass").value, api: $("api").value.trim() }; store.set("diary:settings", settings); $("settings").close(); toast("保存しました"); };
+
+show("write");
+</script>
+</body>
+</html>
