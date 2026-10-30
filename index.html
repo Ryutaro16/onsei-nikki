@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="音声日記">
+<meta name="theme-color" content="#7a4fb5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
 <title>音声日記</title>
 <style>
   :root { --ink:#1f2933; --sub:#5b6773; --line:#d9dee3; --bg:#f6f7f9; --card:#fff; --paper:#fffdf8; --acc:#7a4fb5; --acc-ink:#fff; --acc-bg:#f4effb; --note-bg:#fff8e1; --note-line:#f0d98a; --ok:#1e7d4f; --ng:#c0392b; }
@@ -88,6 +92,39 @@
   .cost-table { width:100%; border-collapse:collapse; font-size:14px; margin:6px 0; }
   .cost-table td, .cost-table th { border-bottom:1px solid var(--line); padding:4px 2px; text-align:right; }
   .cost-table td:first-child, .cost-table th:first-child { text-align:left; }
+  /* 分野 */
+  .sum-row { display:flex; gap:8px; }
+  .sum-row select { flex:0 0 auto; }
+  .sum-row .main { flex:1; }
+  select { font:inherit; font-size:16px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-height:44px; }
+  #sumOut .t { font-weight:700; margin:8px 0 4px; }
+  #sumOut .body { white-space:pre-wrap; }
+  .topic-day { margin:14px 2px 4px; font-size:14px; font-weight:700; color:var(--sub); }
+  .topic-day button { border:none; background:none; padding:0; min-height:0; color:var(--acc); font-size:14px; font-weight:700; }
+  .topic { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin:0 0 6px; display:flex; gap:10px; align-items:flex-start; }
+  .topic input[type=checkbox] { width:22px; height:22px; margin:2px 0 0; flex:0 0 auto; }
+  .topic.done span { color:var(--sub); text-decoration:line-through; }
+  details.done-list summary { color:var(--sub); font-size:14px; margin:12px 2px 6px; }
+
+  /* 書き出し */
+  .ex-row { display:flex; gap:6px; align-items:center; margin-top:6px; }
+  .ex-row input { flex:1; min-width:0; font-size:15px; padding:8px; }
+  dialog select { width:100%; }
+  label.check { display:flex; gap:8px; align-items:center; margin-top:10px; }
+  label.check input { width:20px; height:20px; }
+  #printArea { display:none; }
+  @page { margin:14mm 14mm 16mm; }
+  @media print {
+    body.printing > :not(#printArea) { display:none !important; }
+    body.printing { background:#fff; color:#000; }
+    body.printing #printArea { display:block; font-size:11pt; line-height:1.8; }
+    #printArea h1 { font-size:16pt; margin:0 0 4mm; }
+    #printArea .pd { break-inside:avoid-page; margin:0 0 8mm; }
+    #printArea .pd .d { color:#555; font-size:10pt; }
+    #printArea .pd .t { font-size:13pt; font-weight:700; margin:1mm 0 2mm; }
+    #printArea .pd p { margin:0 0 2mm; }
+    #printArea .said { font-size:9.5pt; color:#444; border-left:2px solid #bbb; padding-left:3mm; white-space:pre-wrap; }
+  }
   #readStatus { color:var(--sub); font-size:15px; min-height:1.6em; margin:4px 2px; }
   #readStatus.err { color:var(--ng); font-weight:700; }
 
@@ -109,6 +146,7 @@
     <div class="tabs">
       <button id="tabWrite" class="on">話す</button>
       <button id="tabList">日記</button>
+      <button id="tabTopics">分野</button>
     </div>
     <button class="link" id="openSettings">⚙ 設定</button>
   </header>
@@ -156,6 +194,27 @@
     <input id="search" type="search" placeholder="🔍 キーワードで探す">
     <div class="filters" id="filters"></div>
     <div id="list"></div>
+    <div class="row-btns"><button id="openExport">📤 日記を書き出す(PDF・テキスト)</button></div>
+  </section>
+
+  <!-- 分野ごとの抜き出し・まとめ -->
+  <section id="viewTopics" hidden>
+    <div class="filters" id="catBtns"></div>
+    <div class="notice" id="topicsPending" hidden></div>
+    <div class="card" id="sumBox">
+      <div class="sum-row">
+        <select id="sumPeriod">
+          <option value="month">今月</option>
+          <option value="lastmonth">先月</option>
+          <option value="3months">この3か月</option>
+          <option value="all">全部</option>
+        </select>
+        <button class="main" id="sumRun">AIでまとめる</button>
+      </div>
+      <div id="sumStatus" class="hint"></div>
+      <div id="sumOut"></div>
+    </div>
+    <div id="topicList"></div>
   </section>
 
   <!-- 1日分を読む・直す -->
@@ -188,7 +247,15 @@
   <input id="pass" type="password" autocomplete="off">
   <label for="api">中継サーバーのURL</label>
   <input id="api" type="url" placeholder="ふつうは空欄のまま">
+  <label for="cats">分野(読点「、」で区切る)</label>
+  <input id="cats">
+  <p class="muted">名前を変えても、これまでの抜き出しは元の名前のまま残ります。「やること」はチェックできるリストになります。</p>
   <div class="row-btns"><button class="main" id="saveSettings">保存</button><button id="closeSettings">閉じる</button></div>
+  <hr>
+  <b>リマインド通知</b>
+  <div class="ex-row"><label for="remind" style="margin:0">知らせる時刻</label><input id="remind" type="time" value="22:00" style="max-width:9em"></div>
+  <div class="row-btns" id="pushBtns"></div>
+  <p class="muted" id="pushInfo"></p>
   <hr>
   <b>使った金額(推定)</b>
   <div id="costInfo"></div>
@@ -204,7 +271,37 @@
   <p class="muted">日記はこのiPhoneの中だけに保存しています。機種変更やSafariの「履歴とWebサイトデータを消去」で消えるので、ときどき書き出して「ファイル」アプリ(iCloud Drive)に残してください。</p>
 </dialog>
 
+<dialog id="exportDlg">
+  <b>日記を書き出す</b>
+  <label for="exRange">範囲</label>
+  <select id="exRange">
+    <option value="all">全部の日記</option>
+    <option value="period">期間を選ぶ</option>
+    <option value="mark:fav">★お気に入りの日記</option>
+    <option value="mark:important">❗重要の日記</option>
+    <option value="mark:later">🔖後で見返すの日記</option>
+    <option value="cat">分野の抜き出し</option>
+  </select>
+  <div id="exPeriodBox" class="ex-row" hidden><input id="exFrom" type="date"> 〜 <input id="exTo" type="date"></div>
+  <div id="exCatBox" hidden><select id="exCat"></select></div>
+  <div id="exStyleBox">
+    <label for="exStyle">書き方</label>
+    <select id="exStyle"></select>
+    <label class="check"><input id="exSaid" type="checkbox"> 元の話し言葉も入れる</label>
+  </div>
+  <p class="muted" id="exInfo"></p>
+  <div class="row-btns">
+    <button class="main" id="exPdf">PDFにする</button>
+    <button id="exTxt">テキストで書き出す</button>
+    <button id="exCopy">テキストをコピー</button>
+  </div>
+  <p class="muted">PDF:印刷の画面が開くので、共有ボタン(□↑)から「"ファイル"に保存」やメールに。テキスト:メモ帳・Notion・AIに貼って使えます。</p>
+  <div class="row-btns"><button id="exClose">閉じる</button></div>
+</dialog>
+
 <div id="toast"></div>
+<!-- PDF用(印刷のときだけ表示) -->
+<div id="printArea"></div>
 
 <script>
 // 公開版(GitHub Pages)は Cloudflare の中継サーバーへ、Macの試作はこのページと同じ場所へ
@@ -216,10 +313,14 @@ const mark = (s) => esc(s).replace(/【要確認[^】]*】/g, (m) => `<span clas
 const paras = (s) => s.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${mark(p).replace(/\n/g, "<br>")}</p>`).join("");
 
 // 書き方(サーバーの prompt/styles/<id>.md と同じ並び)
+// paid:有料版を作るときに、有料に切り分ける候補(今は全部使える)
 const STYLES = [
   { id: "kuchou", name: "口調のまま" },
   { id: "shousetsu", name: "小説風" },
   { id: "rekkyo", name: "列挙" },
+  { id: "akutagawa", name: "芥川風", paid: true },
+  { id: "soseki", name: "漱石風", paid: true },
+  { id: "dazai", name: "太宰風", paid: true },
 ];
 const styleName = (id) => STYLES.find((s) => s.id === id)?.name || id;
 // 書き方のボタンを並べる。made は作ってある書き方(まだのものは点線で表示)
@@ -325,15 +426,17 @@ const targetKey = () => draft.target || diaryKey(draft.startedAt || Date.now());
 let view = "write", readKey = null;
 function show(v) {
   view = v;
-  $("viewWrite").hidden = v !== "write"; $("viewList").hidden = v !== "list"; $("viewRead").hidden = v !== "read";
-  $("tabWrite").classList.toggle("on", v === "write"); $("tabList").classList.toggle("on", v === "list" || v === "read");
+  $("viewWrite").hidden = v !== "write"; $("viewList").hidden = v !== "list"; $("viewRead").hidden = v !== "read"; $("viewTopics").hidden = v !== "topics";
+  $("tabWrite").classList.toggle("on", v === "write"); $("tabList").classList.toggle("on", v === "list" || v === "read"); $("tabTopics").classList.toggle("on", v === "topics");
   if (v === "write") renderWrite();
   if (v === "list") renderList();
   if (v === "read") renderRead();
+  if (v === "topics") renderTopics();
   window.scrollTo(0, 0);
 }
 $("tabWrite").onclick = () => show("write");
 $("tabList").onclick = () => show("list");
+$("tabTopics").onclick = () => show("topics");
 $("back").onclick = () => show("list");
 
 function toast(msg) {
@@ -442,6 +545,8 @@ async function save() {
       // 元の話し言葉は、話し足すたびに積み重ねて残す
       said: [...(old?.said || []), { at: draft.startedAt || now, text: draft.input.trim() }],
       marks: old?.marks || [],
+      // 分野の抜き出しは、このあと話した内容全部から作り直す(やることのチェックは引き継ぐ)
+      topics: old?.topics,
       cost: { stt: (old?.cost.stt || 0) + (draft.stt || 0), ai: (old?.cost.ai || 0) + (draft.ai || 0) },
       createdAt: old?.createdAt || now, updatedAt: now,
     });
@@ -453,6 +558,8 @@ async function save() {
   setStatus("");
   toast("保存しました");
   readKey = k; show("read");
+  updateTopics(k); // 待たない。失敗しても「分野」画面からあとで分けられる
+  pushDone(k);
 }
 
 function reset() {
@@ -785,7 +892,10 @@ async function importBackup(f) {
     if (!Object.keys(versions).length) continue;
     const marks = Array.isArray(e.marks) ? e.marks.filter((m) => MARKS.some((x) => x.id === m)) : [];
     const cost = { stt: Number(e.cost?.stt) || 0, ai: Number(e.cost?.ai) || 0 };
-    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], marks, cost, createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
+    const topics = Array.isArray(e.topics?.items)
+      ? { items: e.topics.items.filter((i) => i && typeof i.text === "string").map((i) => ({ cat: String(i.cat || ""), text: i.text, done: !!i.done })), from: Number(e.topics.from) || 0 }
+      : undefined;
+    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], marks, topics, cost, createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
     added++;
   }
   // 使った金額は、このiPhoneに記録がない月だけ引き継ぐ(二重に数えない)
@@ -802,6 +912,308 @@ async function renderBackupInfo() {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   $("backupInfo").textContent = `日記 ${n}日分/最後の書き出し:${lb ? new Date(lb).toLocaleDateString("ja-JP") : "まだ"}${persisted ? "/消さない設定:済み" : ""}`;
 }
+// ---- 分野ごとの抜き出し ----
+// entry.topics = { items:[{cat, text, done}], from:何回分の話し言葉から作ったか }
+const DEFAULT_CATS = ["プライベート", "子ども", "仕事", "将来の夢", "やること"];
+const getCats = () => { const c = store.get("diary:categories"); return Array.isArray(c) && c.length ? c : DEFAULT_CATS; };
+const isTodo = (c) => c === "やること";
+const needsTopics = (e) => e.said.length > 0 && (!e.topics || e.topics.from < e.said.length);
+const topicsBusy = new Set();
+// その日に話した内容全部から、分野ごとの抜き出しを作る。成功で true、失敗でエラーの文
+async function updateTopics(k) {
+  if (topicsBusy.has(k)) return true;
+  topicsBusy.add(k);
+  try {
+    const e = await getEntry(k);
+    if (!e?.said.length) return true;
+    const data = await post("/api/topics", { date: aiDate(k), text: saidText(e.said), categories: getCats() });
+    addCost("ai", data.yen);
+    const now = await getEntry(k);
+    // やることのチェックは、同じ文ならそのまま引き継ぐ
+    const doneTexts = new Set((now.topics?.items || []).filter((i) => i.done).map((i) => i.text));
+    const items = data.items.map((i) => ({ cat: i.category, text: i.text, done: doneTexts.has(i.text) }));
+    await putEntry({ ...now, topics: { items, from: now.said.length }, cost: { ...now.cost, ai: now.cost.ai + data.yen } });
+    if (view === "topics") renderTopics();
+    return true;
+  } catch (err) {
+    return err.message;
+  } finally { topicsBusy.delete(k); }
+}
+
+let curCat = null;
+async function renderTopics() {
+  const cats = getCats();
+  if (!cats.includes(curCat)) curCat = cats[0];
+  const all = await allEntries();
+  const items = all.flatMap((e) => (e.topics?.items || []).map((it, idx) => ({ ...it, date: e.date, idx })));
+  const cnt = (c) => items.filter((i) => i.cat === c && !(isTodo(c) && i.done)).length;
+  $("catBtns").innerHTML = cats.map((c) => `<button data-cat="${esc(c)}" class="${c === curCat ? "on" : ""}">${esc(c)} ${cnt(c)}</button>`).join("");
+  // まだ分野に分けていない日記(保存したときに失敗した・話し足した・これまでの日記)
+  const pending = all.filter(needsTopics);
+  $("topicsPending").hidden = !pending.length;
+  if (pending.length && !backfilling) $("topicsPending").innerHTML = `まだ分野に分けていない日記が<b>${pending.length}日分</b>あります(1日 約1〜2円)。<br><button id="topicsAll">AIで分ける</button>`;
+  // まとめ(前に作ったものがあれば出す)
+  renderSummary();
+  // 抜き出しの一覧(新しい日から)。やることは、終わったものを下にたたむ
+  const mine = items.filter((i) => i.cat === curCat).sort((a, b) => b.date.localeCompare(a.date) || a.idx - b.idx);
+  const block = (list) => {
+    let html = "", day = "";
+    for (const i of list) {
+      if (i.date !== day) { day = i.date; html += `<div class="topic-day"><button data-open="${i.date}">${esc(jpDate(i.date))} ›</button></div>`; }
+      const box = isTodo(curCat) ? `<input type="checkbox" data-date="${i.date}" data-idx="${i.idx}" ${i.done ? "checked" : ""} aria-label="終わった">` : "";
+      html += `<div class="topic ${i.done && isTodo(curCat) ? "done" : ""}">${box}<span>${esc(i.text)}</span></div>`;
+    }
+    return html;
+  };
+  let html;
+  if (!mine.length) html = `<div class="empty">「${esc(curCat)}」の記録はまだありません。<br>日記を保存すると、AIが自動で分野に分けます。</div>`;
+  else if (isTodo(curCat)) {
+    const open = mine.filter((i) => !i.done), done = mine.filter((i) => i.done);
+    html = (open.length ? block(open) : `<div class="empty">やることは全部終わっています</div>`)
+      + (done.length ? `<details class="done-list"><summary>終わったもの ${done.length}件</summary>${block(done)}</details>` : "");
+  } else html = block(mine);
+  $("topicList").innerHTML = html;
+}
+$("catBtns").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-cat]"); if (b) { curCat = b.dataset.cat; $("sumStatus").textContent = ""; renderTopics(); } });
+$("topicList").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-open]"); if (b) { readKey = b.dataset.open; show("read"); } });
+// やることのチェック
+$("topicList").addEventListener("change", async (ev) => {
+  const c = ev.target.closest("input[data-idx]");
+  if (!c) return;
+  const e = await getEntry(c.dataset.date), idx = Number(c.dataset.idx);
+  const items = e.topics.items.map((it, i) => (i === idx ? { ...it, done: c.checked } : it));
+  await putEntry({ ...e, topics: { ...e.topics, items } });
+  toast(c.checked ? "終わったものにしました" : "まだのものに戻しました");
+  renderTopics();
+});
+// まだ分けていない日記を、古い順に1日ずつ分ける
+let backfilling = false;
+$("topicsPending").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#topicsAll") || backfilling) return;
+  backfilling = true;
+  const pending = (await allEntries()).filter(needsTopics).reverse();
+  let ok = 0, err = "";
+  for (const [n, e] of pending.entries()) {
+    $("topicsPending").textContent = `分けています… ${n + 1}/${pending.length}日分`;
+    const r = await updateTopics(e.date);
+    if (r === true) ok++; else { err = r; break; }
+  }
+  backfilling = false;
+  toast(err ? `${ok}日分を分けました。止まりました:${err}` : `${ok}日分を分けました`);
+  renderTopics();
+});
+
+// ---- 分野のまとめ(AI) ----
+// まとめる期間 → [始まりの日, 終わりの日, 表示名]
+function periodRange(p) {
+  const d = new Date(), y = d.getFullYear(), m = d.getMonth(), today = keyOf(d);
+  if (p === "month") return [keyOf(new Date(y, m, 1)), today, `${y}年${m + 1}月`];
+  if (p === "lastmonth") { const s = new Date(y, m - 1, 1); return [keyOf(s), keyOf(new Date(y, m, 0)), `${s.getFullYear()}年${s.getMonth() + 1}月`]; }
+  if (p === "3months") { const s = new Date(y, m - 2, 1); return [keyOf(s), today, `${s.getFullYear()}年${s.getMonth() + 1}月〜${y}年${m + 1}月`]; }
+  return ["0000-00-00", "9999-99-99", "これまで全部"];
+}
+const sumKey = () => `${curCat}|${$("sumPeriod").value}`;
+function renderSummary() {
+  const s = (store.get("diary:summaries") || {})[sumKey()];
+  $("sumOut").innerHTML = s ? `<div class="t">${esc(s.title)}</div><div class="body">${esc(s.body)}</div>
+    <div class="meta">${esc(s.label)}・記録${s.n}件から・${new Date(s.at).toLocaleDateString("ja-JP")}に作成(約${yen(s.yen)}円) <button class="link" id="sumCopy">コピー</button></div>` : "";
+  $("sumRun").textContent = s ? "AIでまとめ直す" : "AIでまとめる";
+}
+$("sumPeriod").onchange = () => { $("sumStatus").textContent = ""; renderSummary(); };
+$("sumOut").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#sumCopy")) return;
+  const s = (store.get("diary:summaries") || {})[sumKey()];
+  try { await navigator.clipboard.writeText(`${s.title}\n${s.body}`); toast("コピーしました"); } catch { toast("コピーできませんでした"); }
+});
+let sumBusy = false;
+$("sumRun").onclick = async () => {
+  if (sumBusy) return;
+  const [from, to, label] = periodRange($("sumPeriod").value), cat = curCat, key = sumKey();
+  const all = await allEntries();
+  const items = all.filter((e) => e.date >= from && e.date <= to).reverse()
+    .flatMap((e) => (e.topics?.items || []).filter((i) => i.cat === cat && !(isTodo(cat) && i.done)).map((i) => ({ date: aiDate(e.date), text: i.text })));
+  if (!items.length) { $("sumStatus").textContent = `${label}の「${cat}」の記録がありません`; return; }
+  sumBusy = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => ($("sumStatus").textContent = `まとめています… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  try {
+    const data = await post("/api/summary", { category: cat, period: label, items });
+    addCost("ai", data.yen);
+    const all2 = store.get("diary:summaries") || {};
+    all2[key] = { ...data.summary, label, n: items.length, at: Date.now(), yen: data.yen };
+    store.set("diary:summaries", all2);
+    $("sumStatus").textContent = "";
+    if (view === "topics" && sumKey() === key) renderSummary();
+  } catch (e) {
+    $("sumStatus").textContent = e.message;
+  } finally { clearInterval(tick); sumBusy = false; }
+};
+
+// ---- 日記の書き出し(PDF・テキスト) ----
+function openExport() {
+  $("exCat").innerHTML = getCats().map((c) => `<option>${esc(c)}</option>`).join("");
+  $("exStyle").innerHTML = `<option value="">それぞれ表示中の書き方</option>` + STYLES.map((s) => `<option value="${s.id}">${s.name}</option>`).join("");
+  const d = new Date();
+  if (!$("exTo").value) $("exTo").value = keyOf(d);
+  if (!$("exFrom").value) $("exFrom").value = keyOf(new Date(d.getFullYear(), d.getMonth(), 1));
+  exChanged();
+  $("exportDlg").showModal();
+}
+// 選んだ範囲の中身を集める
+async function gatherExport() {
+  const r = $("exRange").value, all = (await allEntries()).reverse(); // 古い順(本のように読む)
+  if (r === "cat") {
+    const cat = $("exCat").value;
+    const days = all.map((e) => ({ date: e.date, items: (e.topics?.items || []).filter((i) => i.cat === cat) })).filter((d) => d.items.length);
+    return { kind: "topics", label: `分野「${cat}」`, days, cat };
+  }
+  let list = all, label = "全部の日記";
+  if (r === "period") {
+    const f = $("exFrom").value, t = $("exTo").value;
+    list = all.filter((e) => (!f || e.date >= f) && (!t || e.date <= t));
+    label = `${f ? jpDateY(f) : ""}〜${t ? jpDateY(t) : ""}`;
+  } else if (r.startsWith("mark:")) {
+    const m = MARKS.find((x) => x.id === r.slice(5));
+    list = all.filter((e) => e.marks.includes(m.id));
+    label = `${m.icon}${m.name}の日記`;
+  }
+  return { kind: "diary", label, list, style: $("exStyle").value, said: $("exSaid").checked };
+}
+// 書き方を選んでいても、その日にまだその書き方がなければ表示中の書き方を使う
+const versionFor = (e, style) => (style && e.versions[style]) || cur(e);
+async function exChanged() {
+  const r = $("exRange").value;
+  $("exPeriodBox").hidden = r !== "period"; $("exCatBox").hidden = r !== "cat"; $("exStyleBox").hidden = r === "cat";
+  const g = await gatherExport();
+  const n = g.kind === "topics" ? g.days.length : g.list.length;
+  const miss = g.kind === "diary" && g.style ? g.list.filter((e) => !e.versions[g.style]).length : 0;
+  $("exInfo").textContent = `${n}日分` + (miss ? `(うち${miss}日分は${styleName(g.style)}をまだ作っていないので、表示中の書き方で入れます)` : "");
+}
+for (const id of ["exRange", "exFrom", "exTo", "exCat", "exStyle"]) $(id).addEventListener("change", exChanged);
+function exportText(g) {
+  const line = "――――――――――――";
+  let t = `音声日記 ${g.label}\n(${new Date().toLocaleDateString("ja-JP")} 書き出し)\n\n`;
+  if (g.kind === "topics") {
+    for (const d of g.days) t += `${jpDateY(d.date)}\n${d.items.map((i) => `・${i.text}${isTodo(g.cat) && i.done ? "(済)" : ""}`).join("\n")}\n\n`;
+    return t;
+  }
+  for (const e of g.list) {
+    const v = versionFor(e, g.style);
+    t += `${line}\n${jpDateY(e.date)}　${v.title}\n\n${v.body.trim()}\n`;
+    if (g.said) t += `\n【元の話し言葉】\n${e.said.map((s) => `(${hhmm(s.at)})${s.text}`).join("\n")}\n`;
+    t += "\n";
+  }
+  return t;
+}
+function exportHtml(g) {
+  let h = `<h1>音声日記 ${esc(g.label)}</h1>`;
+  if (g.kind === "topics") {
+    for (const d of g.days) h += `<div class="pd"><div class="d">${esc(jpDateY(d.date))}</div><ul>${d.items.map((i) => `<li>${esc(i.text)}${isTodo(g.cat) && i.done ? "(済)" : ""}</li>`).join("")}</ul></div>`;
+    return h;
+  }
+  for (const e of g.list) {
+    const v = versionFor(e, g.style);
+    h += `<div class="pd"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(v.title)}</div>${paras(v.body)}`;
+    if (g.said) h += e.said.map((s) => `<div class="said">(${hhmm(s.at)}に話した)\n${esc(s.text)}</div>`).join("");
+    h += `</div>`;
+  }
+  return h;
+}
+async function withExport(fn) {
+  const g = await gatherExport();
+  if ((g.kind === "topics" ? g.days : g.list).length === 0) { toast("書き出す日記がありません"); return; }
+  await fn(g);
+}
+$("exPdf").onclick = () => withExport((g) => {
+  $("printArea").innerHTML = exportHtml(g);
+  $("exportDlg").close();
+  document.body.classList.add("printing");
+  window.addEventListener("afterprint", () => document.body.classList.remove("printing"), { once: true });
+  setTimeout(() => window.print(), 50);
+});
+$("exTxt").onclick = () => withExport(async (g) => {
+  const name = `音声日記-${keyOf(new Date()).replace(/-/g, "")}.txt`;
+  const file = new File([exportText(g)], name, { type: "text/plain" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); } catch (e) { if (e.name !== "AbortError") toast("書き出せませんでした"); return; }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  toast("書き出しました");
+});
+$("exCopy").onclick = () => withExport(async (g) => {
+  try { await navigator.clipboard.writeText(exportText(g)); toast("コピーしました"); } catch { toast("コピーできませんでした"); }
+});
+$("openExport").onclick = openExport;
+$("exClose").onclick = () => $("exportDlg").close();
+
+// ---- リマインド通知(筋モンと同じ仕組み。通知サーバーは中継サーバーの /api/push/*) ----
+// 送るのは ランダムな番号・通知の宛先・知らせる時刻・時差・最後に日記を書いた日 だけ(日記の中身は送らない)
+const VAPID_PUBLIC = "BLLQQkwzX5ZgDjwmSb4VRuhxWf2opX21OQNtAsabA-dh0c8FKKnlOiB22A2LwUEJnaxEOq1Gofdthu1Hr8RBcsg";
+const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+const tzMin = () => -new Date().getTimezoneOffset();
+const pushReady = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const standalone = () => navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+// 通知の設定:{ on, remind:"22:00", id }
+const getPush = () => ({ on: false, remind: "22:00", ...store.get("diary:push") });
+const setPush = (p) => store.set("diary:push", p);
+function pushId() {
+  let p = getPush();
+  if (!p.id) { p.id = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join(""); setPush(p); }
+  return p.id;
+}
+// 今日(日記の日)の日記があれば、その日付
+async function todayDone() { const k = diaryKey(Date.now()); return (await getEntry(k)) ? k : ""; }
+function renderPush() {
+  const p = getPush();
+  $("remind").value = p.remind;
+  $("pushBtns").innerHTML = p.on
+    ? `<button class="main" id="pushTest">テスト通知を送る</button><button id="pushOff">通知を止める</button>`
+    : `<button class="main" id="pushOn">通知を受け取る</button>`;
+  $("pushInfo").textContent = p.on
+    ? `毎日 ${p.remind} に、その日の日記がまだなら1回だけ知らせます。時刻を変えたら上の「保存」を押してください。`
+    : standalone() ? "押すと「通知を許可」の確認が出ます。" : "iPhoneでは、ホーム画面に追加した音声日記から開いて押してください(Safariのタブでは通知を受け取れません)。";
+}
+async function pushOn() {
+  if (!pushReady()) { toast(standalone() ? "この端末では通知を受け取れません" : "ホーム画面に追加した音声日記から開いてください"); return; }
+  try {
+    if ((await Notification.requestPermission()) !== "granted") { toast("通知が許可されませんでした(iPhoneの設定→通知→音声日記 で変えられます)"); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(VAPID_PUBLIC) }));
+    const remind = $("remind").value || "22:00";
+    await post("/api/push/subscribe", { id: pushId(), sub: sub.toJSON(), remind, tz: tzMin(), lastDone: await todayDone() });
+    setPush({ ...getPush(), on: true, remind });
+    toast(`毎日 ${remind} に知らせます`);
+  } catch (e) { toast("通知を登録できませんでした:" + e.message); }
+  renderPush();
+}
+async function pushOff() {
+  try { await post("/api/push/unsubscribe", { id: pushId() }); } catch { /* サーバーに残っても、宛先が消えれば送られない */ }
+  try { await (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.unsubscribe(); } catch {}
+  setPush({ ...getPush(), on: false });
+  toast("通知を止めました"); renderPush();
+}
+$("pushBtns").addEventListener("click", async (ev) => {
+  const id = ev.target.closest("button")?.id;
+  if (id === "pushOn") pushOn();
+  if (id === "pushOff") pushOff();
+  if (id === "pushTest") { try { await post("/api/push/test", { id: pushId() }); toast("送りました。数秒で届けば準備OK"); } catch (e) { toast(e.message); } }
+});
+// 時刻を変えたら通知サーバーにも伝える(設定の「保存」から呼ぶ)
+async function pushSettings() {
+  const p = getPush(), remind = $("remind").value || p.remind;
+  setPush({ ...p, remind });
+  if (p.on && remind !== p.remind) { try { await post("/api/push/settings", { id: pushId(), remind, tz: tzMin() }); } catch (e) { toast("通知の時刻を変えられませんでした:" + e.message); } }
+}
+// 日記を保存したら「今日は書いた」と伝える(今日の分のときだけ。失敗しても次の保存でまた送る)
+async function pushDone(k) {
+  if (!getPush().on || k !== diaryKey(Date.now())) return;
+  try { await post("/api/push/done", { id: pushId(), d: k }); } catch {}
+}
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
 // 使った金額:今月・合計と、月ごとの内訳
 function renderCostInfo() {
   const c = getCosts(), months = Object.keys(c).sort().reverse();
@@ -818,9 +1230,17 @@ $("exportBtn").onclick = exportBackup;
 $("importBtn").onclick = () => $("importFile").click();
 $("importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
 
-$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; renderCostInfo(); renderBackupInfo(); $("settings").showModal(); };
+$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; $("cats").value = getCats().join("、"); renderPush(); renderCostInfo(); renderBackupInfo(); $("settings").showModal(); };
 $("closeSettings").onclick = () => $("settings").close();
-$("saveSettings").onclick = () => { settings = { pass: $("pass").value, api: $("api").value.trim() }; store.set("diary:settings", settings); $("settings").close(); toast("保存しました"); };
+$("saveSettings").onclick = () => {
+  settings = { pass: $("pass").value, api: $("api").value.trim() }; store.set("diary:settings", settings);
+  // 分野:同じ名前は1つに、12字・10個まで(サーバーと同じ決まり)
+  const cats = [...new Set($("cats").value.split(/[、,，\n]+/).map((c) => c.trim()).filter((c) => c && c.length <= 12))].slice(0, 10);
+  if (cats.length) store.set("diary:categories", cats);
+  pushSettings();
+  $("settings").close(); toast("保存しました");
+  if (view === "topics") renderTopics();
+};
 
 show("write");
 </script>
