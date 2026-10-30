@@ -73,6 +73,21 @@
   .styles button { min-height:36px; padding:4px 12px; border-radius:18px; font-size:15px; }
   .styles button.on { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
   .styles button.new { border-style:dashed; color:var(--sub); }
+  /* 印・絞り込み・検索 */
+  .filters { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 6px; }
+  .filters button { min-height:34px; padding:3px 12px; border-radius:17px; font-size:14px; }
+  .filters button.on { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  .marks { display:flex; gap:8px; margin:10px 0 0; }
+  .marks button { flex:1; min-height:40px; font-size:15px; padding:6px 4px; color:var(--sub); }
+  .marks button.on { background:var(--note-bg); border-color:var(--note-line); color:var(--ink); font-weight:700; }
+  .item .mk { float:right; font-size:14px; margin-left:6px; }
+  .item .snip { display:block; font-size:14px; color:var(--ink); margin-top:4px; white-space:normal; }
+  .item .snip i { font-style:normal; color:var(--sub); font-size:12px; }
+  mark { background:#ffe58a; color:#1f2933; border-radius:2px; padding:0 1px; }
+  .cost-line { color:var(--sub); font-size:13px; margin-top:10px; text-align:right; }
+  .cost-table { width:100%; border-collapse:collapse; font-size:14px; margin:6px 0; }
+  .cost-table td, .cost-table th { border-bottom:1px solid var(--line); padding:4px 2px; text-align:right; }
+  .cost-table td:first-child, .cost-table th:first-child { text-align:left; }
   #readStatus { color:var(--sub); font-size:15px; min-height:1.6em; margin:4px 2px; }
   #readStatus.err { color:var(--ng); font-weight:700; }
 
@@ -139,6 +154,7 @@
   <section id="viewList" hidden>
     <div class="notice" id="backupNotice" hidden></div>
     <input id="search" type="search" placeholder="🔍 キーワードで探す">
+    <div class="filters" id="filters"></div>
     <div id="list"></div>
   </section>
 
@@ -148,6 +164,7 @@
     <div class="styles" id="readStyles" style="margin:0 0 4px"></div>
     <div id="readStatus" role="status"></div>
     <div id="readPaper"></div>
+    <div class="marks" id="readMarks"></div>
     <div id="readEdit" hidden>
       <div class="card">
         <div class="lbl">タイトル</div>
@@ -172,6 +189,10 @@
   <label for="api">中継サーバーのURL</label>
   <input id="api" type="url" placeholder="ふつうは空欄のまま">
   <div class="row-btns"><button class="main" id="saveSettings">保存</button><button id="closeSettings">閉じる</button></div>
+  <hr>
+  <b>使った金額(推定)</b>
+  <div id="costInfo"></div>
+  <p class="muted">アプリが計算した目安です(1ドル150円)。実際の請求は Anthropic・OpenAI の管理画面で確かめてください。このiPhoneで使った分だけを数えます。</p>
   <hr>
   <b>バックアップ</b>
   <p class="muted" id="backupInfo"></p>
@@ -219,20 +240,44 @@ let settings = store.get("diary:settings") || { pass: store.get("memo:settings")
 // 書きかけ:話した内容・話し始めた日時・話し足す日・選んでいる書き方・書き方ごとに整えた日記と費用
 // 書き方は前回選んだものを使う
 const lastStyle = () => STYLES.some((s) => s.id === store.get("diary:style")) ? store.get("diary:style") : "kuchou";
-const emptyDraft = () => ({ input: "", startedAt: null, target: null, style: lastStyle(), results: {}, metas: {}, stt: 0 });
+// stt・ai はこの書きかけで使った金額(文字起こし・整える)。保存するとその日の日記の金額に足す
+const emptyDraft = () => ({ input: "", startedAt: null, target: null, style: lastStyle(), results: {}, metas: {}, stt: 0, ai: 0 });
 let draft = { ...emptyDraft(), ...store.get("diary:draft") };
 // 書き方を付ける前の書きかけ(result 1つ)を引き継ぐ
 if (draft.result) { draft.results = { kuchou: draft.result }; draft.metas = { kuchou: draft.meta || "" }; draft.style = "kuchou"; delete draft.result; delete draft.meta; }
 const saveDraft = () => store.set("diary:draft", draft);
 
+// ---- 使った金額(推定)。使った月ごとに足していく。書きかけや日記を消しても残る ----
+// { "2026-10": { stt: 文字起こしの円, ai: 整えるの円, n: AIで整えた回数 } }
+const getCosts = () => store.get("diary:costs") || {};
+function addCost(kind, yen) {
+  if (!yen) return;
+  const c = getCosts(), d = new Date(), m = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const row = c[m] || { stt: 0, ai: 0, n: 0 };
+  row[kind] += yen;
+  if (kind === "ai") row.n++;
+  c[m] = row; store.set("diary:costs", c);
+}
+const yen = (n) => n < 10 ? n.toFixed(1) : Math.round(n).toLocaleString();
+
 // ---- 日記の保存(IndexedDB)。1日=1件、キーは「2026-10-29」 ----
-// { date, style(表示中の書き方), versions:{書き方:{title, body, needs_check}}, said:[{at, text}], createdAt, updatedAt }
+// { date, style(表示中の書き方), versions:{書き方:{title, body, needs_check}}, said:[{at, text}],
+//   marks:["fav"|"important"|"later"], cost:{stt, ai}(この日にかかった円), createdAt, updatedAt }
 // 書き方を付ける前の形({title, body, needs_check})は「口調のまま」として読む
 function normalize(e) {
-  if (!e || e.versions) return e;
-  const { title, body, needs_check, ...rest } = e;
-  return { ...rest, style: "kuchou", versions: { kuchou: { title: title || "", body: body || "", needs_check: needs_check || [] } } };
+  if (!e) return e;
+  if (!e.versions) {
+    const { title, body, needs_check, ...rest } = e;
+    e = { ...rest, style: "kuchou", versions: { kuchou: { title: title || "", body: body || "", needs_check: needs_check || [] } } };
+  }
+  return { marks: [], cost: { stt: 0, ai: 0 }, ...e };
 }
+// 日記に付ける印
+const MARKS = [
+  { id: "fav", icon: "★", name: "お気に入り" },
+  { id: "important", icon: "❗", name: "重要" },
+  { id: "later", icon: "🔖", name: "後で見返す" },
+];
 const cur = (e) => e.versions[e.style] || Object.values(e.versions)[0];
 // その日に話した内容を全部まとめる(まだない書き方を作るとき)
 function saidText(saids) {
@@ -372,6 +417,7 @@ function run() {
     if (old?.versions[style]) req.existing = old.versions[style].body;
     else if (old) req.text = saidText([...old.said, { at: draft.startedAt, text }]);
     const data = await post("/api/write", req);
+    draft.ai = (draft.ai || 0) + data.yen; addCost("ai", data.yen);
     draft.results[style] = data.diary;
     // 録音したときは、文字起こし(OpenAI)の費用も並べる
     const stt = draft.stt ? `文字起こし 約${draft.stt.toFixed(1)}円＋` : "";
@@ -395,6 +441,8 @@ async function save() {
       versions: { ...draft.results },
       // 元の話し言葉は、話し足すたびに積み重ねて残す
       said: [...(old?.said || []), { at: draft.startedAt || now, text: draft.input.trim() }],
+      marks: old?.marks || [],
+      cost: { stt: (old?.cost.stt || 0) + (draft.stt || 0), ai: (old?.cost.ai || 0) + (draft.ai || 0) },
       createdAt: old?.createdAt || now, updatedAt: now,
     });
   } catch (e) {
@@ -498,10 +546,13 @@ async function sendQueue() {
     queue.shift();
     if (!data) { failed.push(blob, ...queue); queue = []; $("retryBtn").hidden = false; setStatus("文字起こしに失敗しました:" + err, "err"); break; }
     if (data.text) {
+      // 一番下(最新の文字)を見ているときだけ、増えた文字に合わせて下へ送る。指で上に戻して読んでいるときは動かさない
+      const atBottom = input.scrollHeight - input.scrollTop - input.clientHeight < 40;
       draft.input += (draft.input && !draft.input.endsWith("\n") ? "\n" : "") + data.text;
       input.value = draft.input; $("count").textContent = draft.input.length + "字";
+      if (atBottom) input.scrollTop = input.scrollHeight;
     }
-    doneCount++; draft.stt = (draft.stt || 0) + (data.yen || 0); saveDraft();
+    doneCount++; draft.stt = (draft.stt || 0) + (data.yen || 0); addCost("stt", data.yen); saveDraft();
     recInfo();
   }
   sending = false; recInfo(); maybeSummarize();
@@ -539,25 +590,34 @@ for (const id of ["rTitle", "rBody"]) {
 
 // ---- 一覧 ----
 const lastBackup = () => store.get("diary:lastBackup");
+let listFilter = "all"; // 印での絞り込み(all / fav / important / later)
 async function renderList() {
   const all = await allEntries();
   const q = $("search").value.trim();
-  // どの書き方の日記でも探す
-  const hit = q ? all.filter((e) => Object.values(e.versions).some((v) => (v.title + "\n" + v.body).includes(q))) : all;
+  // 印で絞り込むボタン(付いている日記の数も出す)
+  const count = (id) => all.filter((e) => e.marks.includes(id)).length;
+  $("filters").innerHTML = `<button data-f="all" class="${listFilter === "all" ? "on" : ""}">全部</button>`
+    + MARKS.map((m) => `<button data-f="${m.id}" class="${listFilter === m.id ? "on" : ""}">${m.icon}${m.name} ${count(m.id)}</button>`).join("");
+  let shown = listFilter === "all" ? all : all.filter((e) => e.marks.includes(listFilter));
+  // キーワード:どの書き方の日記・元の話し言葉でも探し、見つかった部分を出す
+  const found = new Map();
+  if (q) shown = shown.filter((e) => { const f = findIn(e, q); if (f) found.set(e.date, f); return !!f; });
   let html = "";
   // 1年前の今日
-  if (!q) {
+  if (!q && listFilter === "all") {
     const d = new Date(); d.setFullYear(d.getFullYear() - 1);
     const ago = all.find((e) => e.date === keyOf(d));
     if (ago) html += `<div class="month">1年前の今日</div>${itemHtml(ago, "ago")}`;
   }
+  if (q) html += `<div class="month">「${esc(q)}」が見つかった日記 ${shown.length}件</div>`;
   let month = "";
-  for (const e of hit) {
+  for (const e of shown) {
     const m = `${dateOfKey(e.date).getFullYear()}年${dateOfKey(e.date).getMonth() + 1}月`;
-    if (m !== month) { month = m; html += `<div class="month">${m}</div>`; }
-    html += itemHtml(e);
+    if (!q && m !== month) { month = m; html += `<div class="month">${m}</div>`; }
+    html += itemHtml(e, "", q, found.get(e.date));
   }
-  if (!hit.length) html = `<div class="empty">${q ? "見つかりませんでした" : "まだ日記がありません。「話す」から今日のことを話してください。"}</div>`;
+  const mk = MARKS.find((m) => m.id === listFilter);
+  if (!shown.length) html = `<div class="empty">${q ? "見つかりませんでした" : mk ? `${mk.name}の日記はまだありません。<br>日記を開いて「${mk.icon}${mk.name}」を押すと付きます。` : "まだ日記がありません。「話す」から今日のことを話してください。"}</div>`;
   $("list").innerHTML = html;
   // 最後の書き出しから30日たったら知らせる
   const lb = lastBackup();
@@ -566,26 +626,62 @@ async function renderList() {
   $("backupNotice").innerHTML = due ? `<b>バックアップを書き出しましょう</b><br>${lb ? `最後の書き出しは${Math.floor((Date.now() - lb) / 864e5)}日前です。` : "まだ一度も書き出していません。"}日記はこのiPhoneの中だけにあります。<br><button id="noticeExport">今すぐ書き出す</button>` : "";
   if (due) $("noticeExport").onclick = exportBackup;
 }
-function itemHtml(e, cls = "") {
+function itemHtml(e, cls = "", q = "", snips = []) {
   const v = cur(e);
+  const icons = MARKS.filter((m) => e.marks.includes(m.id)).map((m) => m.icon).join("");
+  const title = q ? highlight(v.title, q) : esc(v.title);
   const first = v.body.split("\n").find((l) => l.trim() && !l.startsWith("■")) || "";
-  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b><span>${esc(jpDate(e.date))}</span>${esc(v.title)}</b><small>${esc(first)}</small></button>`;
+  const sub = q ? snips.map((s) => `<span class="snip">${s}</span>`).join("") : `<small>${esc(first)}</small>`;
+  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b>${icons ? `<span class="mk">${icons}</span>` : ""}<span>${esc(jpDate(e.date))}</span>${title}</b>${sub}</button>`;
 }
+
+// ---- キーワード検索 ----
+const lower = (s) => s.toLowerCase();
+// 見つかった言葉に印を付ける(英字は大文字・小文字を区別しない)
+function highlight(text, q) {
+  const L = lower(text), Q = lower(q);
+  let out = "", pos = 0, i;
+  while ((i = L.indexOf(Q, pos)) >= 0) { out += esc(text.slice(pos, i)) + `<mark>${esc(text.slice(i, i + q.length))}</mark>`; pos = i + q.length; }
+  return out + esc(text.slice(pos));
+}
+// 見つかった場所の前後を切り出す
+function snippet(text, q) {
+  const i = lower(text).indexOf(lower(q));
+  if (i < 0) return null;
+  const s = Math.max(0, i - 25), t = Math.min(text.length, i + q.length + 40);
+  return (s ? "…" : "") + highlight(text.slice(s, t).replace(/\s+/g, " "), q) + (t < text.length ? "…" : "");
+}
+// 表示中の書き方 → ほかの書き方 → 元の話し言葉 の順に探し、見つかった部分を2つまで返す(見つからなければ null)
+function findIn(e, q) {
+  const v = cur(e), out = [];
+  const add = (label, text) => { if (out.length < 2) { const s = snippet(text, q); if (s) out.push((label ? `<i>${label}</i> ` : "") + s); } };
+  add("", v.body);
+  if (!out.length) for (const [id, o] of Object.entries(e.versions)) if (o !== v) add(`(${styleName(id)})`, o.body);
+  if (!out.length) for (const s of e.said) add("(元の話し言葉)", s.text);
+  return out.length || lower(v.title).includes(lower(q)) ? out : null;
+}
+
+$("filters").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-f]"); if (b) { listFilter = b.dataset.f; renderList(); } });
 $("list").addEventListener("click", (ev) => { const b = ev.target.closest(".item"); if (b) { readKey = b.dataset.key; setReadStatus(""); show("read"); } });
 $("search").addEventListener("input", renderList);
 
 // ---- 1日分を読む・直す ----
 let readBusy = false;
 function setReadStatus(msg, cls = "") { const s = $("readStatus"); s.textContent = msg; s.className = cls; }
+let shownReadKey = null; // 別の日を開いたら、前の日のお知らせを消す
 async function renderRead() {
   const e = await getEntry(readKey);
   if (!e) { show("list"); return; }
-  $("readEdit").hidden = true; $("readPaper").hidden = false; $("readBtns").hidden = false;
+  if (shownReadKey !== readKey) { shownReadKey = readKey; if (!readBusy) setReadStatus(""); }
+  $("readEdit").hidden = true; $("readPaper").hidden = false; $("readBtns").hidden = false; $("readMarks").hidden = false;
   styleButtons($("readStyles"), e.style, Object.keys(e.versions), pickReadStyle);
   const v = cur(e);
   const saids = e.said.map((s) => `<div class="said"><small>${esc(jpDate(diaryKey(s.at)) === jpDate(e.date) ? "" : jpDate(keyOf(new Date(s.at))) + " ")}${hhmm(s.at)} に話した</small>${esc(s.text)}</div>`).join("");
+  const c = e.cost, total = c.stt + c.ai;
+  const costLine = total ? `<div class="cost-line">この日にかかった金額 約${yen(total)}円(文字起こし ${yen(c.stt)}円＋整える ${yen(c.ai)}円)</div>` : "";
   $("readPaper").innerHTML = `<div class="paper"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(v.title)}</div>${paras(v.body)}
-    <details><summary>元の話し言葉(${e.said.length}回分)</summary>${saids}</details></div>`;
+    <details><summary>元の話し言葉(${e.said.length}回分)</summary>${saids}</details>${costLine}</div>`;
+  $("readMarks").innerHTML = MARKS.map((m) => `<button data-mark="${m.id}" class="${e.marks.includes(m.id) ? "on" : ""}">${m.icon} ${m.name}</button>`).join("");
 }
 // 保存した日記の書き方を切り替える。まだ作っていない書き方は、その日に話した内容全部から作って残す
 async function pickReadStyle(id) {
@@ -600,8 +696,9 @@ async function pickReadStyle(id) {
   try {
     const last = e.said[e.said.length - 1].at;
     const data = await post("/api/write", { style: id, date: aiDate(e.date), spoken: aiSpoken(last), text: saidText(e.said), existing: "" });
+    addCost("ai", data.yen);
     const now = await getEntry(readKey);
-    await putEntry({ ...now, style: id, versions: { ...now.versions, [id]: data.diary } });
+    await putEntry({ ...now, style: id, versions: { ...now.versions, [id]: data.diary }, cost: { ...now.cost, ai: now.cost.ai + data.yen } });
     clearInterval(tick);
     setReadStatus(`${styleName(id)}を作りました(約${data.yen.toFixed(1)}円)。次からは切り替えるだけで読めます`);
     if (view === "read" && readKey === now.date) renderRead();
@@ -610,10 +707,20 @@ async function pickReadStyle(id) {
     setReadStatus(err.message, "err");
   } finally { readBusy = false; }
 }
+// 印を付ける・外す
+$("readMarks").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-mark]");
+  if (!b) return;
+  const e = await getEntry(readKey), id = b.dataset.mark, on = !e.marks.includes(id);
+  await putEntry({ ...e, marks: on ? [...e.marks, id] : e.marks.filter((m) => m !== id), updatedAt: Date.now() });
+  const m = MARKS.find((x) => x.id === id);
+  toast(on ? `${m.icon}${m.name}にしました` : `${m.name}を外しました`);
+  renderRead();
+});
 $("edit").onclick = async () => {
   const v = cur(await getEntry(readKey));
   $("eTitle").value = v.title; $("eBody").value = v.body;
-  $("readPaper").hidden = true; $("readBtns").hidden = true; $("readEdit").hidden = false;
+  $("readPaper").hidden = true; $("readBtns").hidden = true; $("readMarks").hidden = true; $("readEdit").hidden = false;
   requestAnimationFrame(() => grow($("eBody")));
 };
 $("eBody").addEventListener("input", (e) => grow(e.target));
@@ -644,7 +751,7 @@ async function exportBackup() {
   const all = await allEntries();
   if (!all.length) { toast("まだ日記がありません"); return; }
   const name = `音声日記-バックアップ-${keyOf(new Date()).replace(/-/g, "")}.json`;
-  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 2, exportedAt: new Date().toISOString(), entries: all }, null, 1)], name, { type: "application/json" });
+  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 2, exportedAt: new Date().toISOString(), entries: all, costs: getCosts() }, null, 1)], name, { type: "application/json" });
   // iPhoneは共有シートで「ファイルに保存」できる。使えなければダウンロード
   if (navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); }
@@ -676,8 +783,16 @@ async function importBackup(f) {
       if (v && typeof v.body === "string") versions[s.id] = { title: String(v.title || ""), body: v.body, needs_check: Array.isArray(v.needs_check) ? v.needs_check : [] };
     }
     if (!Object.keys(versions).length) continue;
-    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
+    const marks = Array.isArray(e.marks) ? e.marks.filter((m) => MARKS.some((x) => x.id === m)) : [];
+    const cost = { stt: Number(e.cost?.stt) || 0, ai: Number(e.cost?.ai) || 0 };
+    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], marks, cost, createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
     added++;
+  }
+  // 使った金額は、このiPhoneに記録がない月だけ引き継ぐ(二重に数えない)
+  if (data.costs && typeof data.costs === "object") {
+    const c = getCosts();
+    for (const [m, r] of Object.entries(data.costs)) if (/^\d{4}-\d{2}$/.test(m) && !c[m]) c[m] = { stt: Number(r.stt) || 0, ai: Number(r.ai) || 0, n: Number(r.n) || 0 };
+    store.set("diary:costs", c);
   }
   toast(`${added}日分を読み込みました${kept ? `(${kept}日分はこのiPhoneのほうが新しいので残しました)` : ""}`);
   if (view === "list") renderList();
@@ -687,11 +802,23 @@ async function renderBackupInfo() {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   $("backupInfo").textContent = `日記 ${n}日分/最後の書き出し:${lb ? new Date(lb).toLocaleDateString("ja-JP") : "まだ"}${persisted ? "/消さない設定:済み" : ""}`;
 }
+// 使った金額:今月・合計と、月ごとの内訳
+function renderCostInfo() {
+  const c = getCosts(), months = Object.keys(c).sort().reverse();
+  if (!months.length) { $("costInfo").innerHTML = `<p class="muted">まだありません</p>`; return; }
+  const d = new Date(), now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const sum = (r) => r.stt + r.ai;
+  const total = months.reduce((a, m) => a + sum(c[m]), 0);
+  const n = months.reduce((a, m) => a + c[m].n, 0);
+  $("costInfo").innerHTML = `<p style="margin:6px 0">今月 <b>約${yen(c[now] ? sum(c[now]) : 0)}円</b> ・ これまでの合計 <b>約${yen(total)}円</b>(整えた回数 ${n}回)</p>
+    <table class="cost-table"><tr><th>月</th><th>文字起こし</th><th>整える</th><th>合計</th></tr>
+    ${months.map((m) => `<tr><td>${Number(m.slice(0, 4))}年${Number(m.slice(5))}月</td><td>${yen(c[m].stt)}円</td><td>${yen(c[m].ai)}円</td><td>${yen(sum(c[m]))}円</td></tr>`).join("")}</table>`;
+}
 $("exportBtn").onclick = exportBackup;
 $("importBtn").onclick = () => $("importFile").click();
 $("importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
 
-$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; renderBackupInfo(); $("settings").showModal(); };
+$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; renderCostInfo(); renderBackupInfo(); $("settings").showModal(); };
 $("closeSettings").onclick = () => $("settings").close();
 $("saveSettings").onclick = () => { settings = { pass: $("pass").value, api: $("api").value.trim() }; store.set("diary:settings", settings); $("settings").close(); toast("保存しました"); };
 
