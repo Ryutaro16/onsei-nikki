@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="音声日記">
+<meta name="theme-color" content="#7a4fb5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<title>音声日記</title>
+<style>
+  :root { --ink:#1f2933; --sub:#5b6773; --line:#d9dee3; --bg:#f6f7f9; --card:#fff; --paper:#fffdf8; --acc:#7a4fb5; --acc-ink:#fff; --acc-bg:#f4effb; --note-bg:#fff8e1; --note-line:#f0d98a; --ok:#1e7d4f; --ng:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif; color:var(--ink); background:var(--bg); line-height:1.6; font-size:17px; -webkit-text-size-adjust:100%; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px 48px; padding-top:max(12px, env(safe-area-inset-top)); }
+  header { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; }
+  .tabs { display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:3px; }
+  .tabs button { border:none; min-height:38px; padding:6px 14px; border-radius:9px; background:none; color:var(--sub); }
+  .tabs button.on { background:var(--acc); color:var(--acc-ink); font-weight:700; }
+  button { font:inherit; color:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:var(--card); padding:10px 16px; min-height:44px; }
+  button.main { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  button:disabled { opacity:.45; cursor:default; }
+  .link { border:none; background:none; color:var(--sub); padding:8px; font-size:15px; }
+  textarea, input { width:100%; font:inherit; font-size:17px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; line-height:1.6; }
+  textarea { resize:vertical; }
+  #input { min-height:min(30vh, 280px); }
+  h2 { font-size:19px; margin:4px 2px 10px; }
+  h2 small { font-size:14px; font-weight:400; color:var(--sub); margin-left:6px; }
+  .hint { color:var(--sub); font-size:14px; display:flex; justify-content:space-between; gap:8px; margin:4px 2px 0; }
+  #count { white-space:nowrap; }
+  .rec-box { margin-bottom:10px; }
+  .rec-box .row-btns { margin:0 0 6px; }
+  button.rec { flex:1; background:#c0392b; border-color:#c0392b; color:#fff; font-weight:700; min-height:56px; font-size:18px; }
+  button.rec.on { background:#fff; color:#c0392b; animation:blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity:.6; } }
+  .row-btns { display:flex; gap:10px; margin:12px 0; flex-wrap:wrap; }
+  .row-btns .main { flex:1; }
+  #status { color:var(--sub); font-size:15px; min-height:1.6em; }
+  #status.err { color:var(--ng); font-weight:700; }
+  #status.ok { color:var(--ok); font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .lbl { font-size:13px; font-weight:700; color:var(--sub); margin:12px 2px 4px; }
+  .lbl:first-child { margin-top:0; }
+  #rTitle { font-size:19px; font-weight:700; }
+  .notice { background:var(--note-bg); border:1px solid var(--note-line); border-radius:10px; padding:10px 12px; margin:0 0 10px; font-size:15px; }
+  .notice ul { margin:4px 0 0; padding-left:1.2em; }
+  .notice button { margin-top:8px; min-height:38px; padding:6px 12px; }
+  .info { background:var(--acc-bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:15px; }
+  .meta { color:var(--sub); font-size:13px; margin-top:6px; text-align:right; }
+  .chk { background:var(--note-bg); border-radius:3px; }
+
+  /* 日記を読む */
+  .paper { background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .paper .d { color:var(--sub); font-size:14px; }
+  .paper .t { font-size:20px; font-weight:700; margin:2px 0 10px; }
+  .paper p { margin:0 0 12px; }
+  details { margin-top:12px; color:var(--sub); font-size:15px; }
+  details summary { cursor:pointer; padding:6px 0; }
+  .said { white-space:pre-wrap; border-left:3px solid var(--line); padding-left:10px; margin:6px 0 12px; }
+  .said small { display:block; font-size:12px; }
+
+  /* 一覧 */
+  #search { margin-bottom:10px; }
+  .month { font-size:14px; font-weight:700; color:var(--sub); margin:16px 2px 6px; }
+  .item { display:block; width:100%; text-align:left; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:0 0 6px; min-height:0; }
+  .item b { display:block; font-size:16px; }
+  .item b span { font-weight:400; color:var(--sub); font-size:14px; margin-right:6px; }
+  .item small { display:block; color:var(--sub); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item.ago { border-color:var(--acc); background:var(--acc-bg); }
+  .empty { color:var(--sub); text-align:center; padding:30px 0; }
+
+  /* 書き方の切り替え */
+  .styles { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:12px 0 0; }
+  .styles > span { font-size:14px; color:var(--sub); margin-right:2px; }
+  .styles button { min-height:36px; padding:4px 12px; border-radius:18px; font-size:15px; }
+  .styles button.on { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  .styles button.new { border-style:dashed; color:var(--sub); }
+  /* 印・絞り込み・検索 */
+  .filters { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 6px; }
+  .filters button { min-height:34px; padding:3px 12px; border-radius:17px; font-size:14px; }
+  .filters button.on { background:var(--acc); color:var(--acc-ink); border-color:var(--acc); font-weight:700; }
+  .marks { display:flex; gap:8px; margin:10px 0 0; }
+  .marks button { flex:1; min-height:40px; font-size:15px; padding:6px 4px; color:var(--sub); }
+  .marks button.on { background:var(--note-bg); border-color:var(--note-line); color:var(--ink); font-weight:700; }
+  .item .mk { float:right; font-size:14px; margin-left:6px; }
+  .item .snip { display:block; font-size:14px; color:var(--ink); margin-top:4px; white-space:normal; }
+  .item .snip i { font-style:normal; color:var(--sub); font-size:12px; }
+  mark { background:#ffe58a; color:#1f2933; border-radius:2px; padding:0 1px; }
+  .cost-line { color:var(--sub); font-size:13px; margin-top:10px; text-align:right; }
+  .cost-table { width:100%; border-collapse:collapse; font-size:14px; margin:6px 0; }
+  .cost-table td, .cost-table th { border-bottom:1px solid var(--line); padding:4px 2px; text-align:right; }
+  .cost-table td:first-child, .cost-table th:first-child { text-align:left; }
+  /* 分野 */
+  .sum-row { display:flex; gap:8px; }
+  .sum-row select { flex:0 0 auto; }
+  .sum-row .main { flex:1; }
+  select { font:inherit; font-size:16px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-height:44px; }
+  #sumOut .t { font-weight:700; margin:8px 0 4px; }
+  #sumOut .body { white-space:pre-wrap; }
+  .topic-day { margin:14px 2px 4px; font-size:14px; font-weight:700; color:var(--sub); }
+  .topic-day button { border:none; background:none; padding:0; min-height:0; color:var(--acc); font-size:14px; font-weight:700; }
+  .topic { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin:0 0 6px; display:flex; gap:10px; align-items:flex-start; }
+  .topic input[type=checkbox] { width:22px; height:22px; margin:2px 0 0; flex:0 0 auto; }
+  .topic.done span { color:var(--sub); text-decoration:line-through; }
+  details.done-list summary { color:var(--sub); font-size:14px; margin:12px 2px 6px; }
+
+  /* 書き出し */
+  .ex-row { display:flex; gap:6px; align-items:center; margin-top:6px; }
+  .ex-row input { flex:1; min-width:0; font-size:15px; padding:8px; }
+  dialog select { width:100%; }
+  label.check { display:flex; gap:8px; align-items:center; margin-top:10px; }
+  label.check input { width:20px; height:20px; }
+  #printArea { display:none; }
+  @page { margin:14mm 14mm 16mm; }
+  @media print {
+    body.printing > :not(#printArea) { display:none !important; }
+    body.printing { background:#fff; color:#000; }
+    body.printing #printArea { display:block; font-size:11pt; line-height:1.8; }
+    #printArea h1 { font-size:16pt; margin:0 0 4mm; }
+    #printArea .pd { break-inside:avoid-page; margin:0 0 8mm; }
+    #printArea .pd .d { color:#555; font-size:10pt; }
+    #printArea .pd .t { font-size:13pt; font-weight:700; margin:1mm 0 2mm; }
+    #printArea .pd p { margin:0 0 2mm; }
+    #printArea .said { font-size:9.5pt; color:#444; border-left:2px solid #bbb; padding-left:3mm; white-space:pre-wrap; }
+  }
+  #readStatus { color:var(--sub); font-size:15px; min-height:1.6em; margin:4px 2px; }
+  #readStatus.err { color:var(--ng); font-weight:700; }
+
+  #toast { position:fixed; left:50%; bottom:30px; transform:translateX(-50%); background:#1f2933; color:#fff; padding:10px 18px; border-radius:20px; font-size:15px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:.92; }
+  dialog { border:1px solid var(--line); border-radius:14px; padding:16px; max-width:min(92vw, 480px); width:100%; color:var(--ink); background:var(--card); }
+  dialog label { display:block; font-size:15px; margin:10px 0 4px; }
+  dialog .muted { color:var(--sub); font-size:13px; }
+  dialog hr { border:none; border-top:1px solid var(--line); margin:16px 0 8px; }
+  [hidden] { display:none !important; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e6e9ec; --sub:#9aa5b1; --line:#3a424a; --bg:#15191d; --card:#1f252b; --paper:#23262b; --acc:#a07ad6; --acc-bg:#2a2335; --note-bg:#3a3320; --note-line:#6b5a2a; --ok:#5cc98f; --ng:#ff7b6b; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="tabs">
+      <button id="tabWrite" class="on">話す</button>
+      <button id="tabList">日記</button>
+      <button id="tabTopics">分野</button>
+    </div>
+    <button class="link" id="openSettings">⚙ 設定</button>
+  </header>
+
+  <!-- 話す → 日記にする → 保存 -->
+  <section id="viewWrite">
+    <h2 id="writeHead"></h2>
+    <div class="info" id="addInfo" hidden></div>
+    <div class="rec-box">
+      <div class="row-btns">
+        <button id="recBtn" class="rec">● 録音を始める</button>
+        <button id="retryBtn" hidden>文字起こしをやり直す</button>
+      </div>
+      <div id="recStatus" class="hint">黙っていても止まりません。止めると自動で文字にして日記に整えます。</div>
+    </div>
+    <textarea id="input" placeholder="上の「録音を始める」で話すか、ここをタップしてキーボードの🎤で話してください。&#10;録音した内容は、ここに文字で入ります。"></textarea>
+    <div class="hint"><span>「えー」や聞き間違いはそのままでOK(AIが直します)。患者さんの名前は話さないでください。</span><span id="count">0字</span></div>
+    <div class="styles" id="writeStyles"></div>
+    <div class="row-btns">
+      <button class="main" id="run">日記にする</button>
+      <button id="clear">消す</button>
+    </div>
+    <div id="status" role="status"></div>
+
+    <section id="result" hidden>
+      <div class="notice" id="checks" hidden></div>
+      <div class="card">
+        <div class="lbl">タイトル</div>
+        <input id="rTitle">
+        <div class="lbl">日記</div>
+        <textarea id="rBody" rows="10"></textarea>
+      </div>
+      <div class="meta" id="meta"></div>
+      <div class="row-btns">
+        <button class="main" id="save">保存</button>
+        <button id="again">もう一度整える</button>
+      </div>
+      <div class="hint"><span>欄の中は直接直せます。直してから保存してください。</span></div>
+    </section>
+  </section>
+
+  <!-- 一覧 -->
+  <section id="viewList" hidden>
+    <div class="notice" id="backupNotice" hidden></div>
+    <input id="search" type="search" placeholder="🔍 キーワードで探す">
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+    <div class="row-btns"><button id="openExport">📤 日記を書き出す(PDF・テキスト)</button></div>
+  </section>
+
+  <!-- 分野ごとの抜き出し・まとめ -->
+  <section id="viewTopics" hidden>
+    <div class="filters" id="catBtns"></div>
+    <div class="notice" id="topicsPending" hidden></div>
+    <div class="card" id="sumBox">
+      <div class="sum-row">
+        <select id="sumPeriod">
+          <option value="month">今月</option>
+          <option value="lastmonth">先月</option>
+          <option value="3months">この3か月</option>
+          <option value="all">全部</option>
+        </select>
+        <button class="main" id="sumRun">AIでまとめる</button>
+      </div>
+      <div id="sumStatus" class="hint"></div>
+      <div id="sumOut"></div>
+    </div>
+    <div id="topicList"></div>
+  </section>
+
+  <!-- 1日分を読む・直す -->
+  <section id="viewRead" hidden>
+    <div class="row-btns" style="margin-top:0"><button class="link" id="back">‹ 一覧へ</button></div>
+    <div class="styles" id="readStyles" style="margin:0 0 4px"></div>
+    <div id="readStatus" role="status"></div>
+    <div id="readPaper"></div>
+    <div class="marks" id="readMarks"></div>
+    <div id="readEdit" hidden>
+      <div class="card">
+        <div class="lbl">タイトル</div>
+        <input id="eTitle">
+        <div class="lbl">日記</div>
+        <textarea id="eBody" rows="12"></textarea>
+      </div>
+      <div class="row-btns"><button class="main" id="eSave">直した内容を保存</button><button id="eCancel">やめる</button></div>
+    </div>
+    <div class="row-btns" id="readBtns">
+      <button class="main" id="addMore">話し足す</button>
+      <button id="edit">直す</button>
+      <button id="del">消す</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <b>設定</b>
+  <label for="pass">合言葉</label>
+  <input id="pass" type="password" autocomplete="off">
+  <label for="api">中継サーバーのURL</label>
+  <input id="api" type="url" placeholder="ふつうは空欄のまま">
+  <label for="cats">分野(読点「、」で区切る)</label>
+  <input id="cats">
+  <p class="muted">名前を変えても、これまでの抜き出しは元の名前のまま残ります。「やること」はチェックできるリストになります。</p>
+  <div class="row-btns"><button class="main" id="saveSettings">保存</button><button id="closeSettings">閉じる</button></div>
+  <hr>
+  <b>リマインド通知</b>
+  <div class="ex-row"><label for="remind" style="margin:0">知らせる時刻</label><input id="remind" type="time" value="22:00" style="max-width:9em"></div>
+  <div class="row-btns" id="pushBtns"></div>
+  <p class="muted" id="pushInfo"></p>
+  <hr>
+  <b>使った金額(推定)</b>
+  <div id="costInfo"></div>
+  <p class="muted">アプリが計算した目安です(1ドル150円)。実際の請求は Anthropic・OpenAI の管理画面で確かめてください。このiPhoneで使った分だけを数えます。</p>
+  <hr>
+  <b>バックアップ</b>
+  <p class="muted" id="backupInfo"></p>
+  <div class="row-btns">
+    <button id="exportBtn">書き出す</button>
+    <button id="importBtn">読み込む</button>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
+  <p class="muted">日記はこのiPhoneの中だけに保存しています。機種変更やSafariの「履歴とWebサイトデータを消去」で消えるので、ときどき書き出して「ファイル」アプリ(iCloud Drive)に残してください。</p>
+</dialog>
+
+<dialog id="exportDlg">
+  <b>日記を書き出す</b>
+  <label for="exRange">範囲</label>
+  <select id="exRange">
+    <option value="all">全部の日記</option>
+    <option value="period">期間を選ぶ</option>
+    <option value="mark:fav">★お気に入りの日記</option>
+    <option value="mark:important">❗重要の日記</option>
+    <option value="mark:later">🔖後で見返すの日記</option>
+    <option value="cat">分野の抜き出し</option>
+  </select>
+  <div id="exPeriodBox" class="ex-row" hidden><input id="exFrom" type="date"> 〜 <input id="exTo" type="date"></div>
+  <div id="exCatBox" hidden><select id="exCat"></select></div>
+  <div id="exStyleBox">
+    <label for="exStyle">書き方</label>
+    <select id="exStyle"></select>
+    <label class="check"><input id="exSaid" type="checkbox"> 元の話し言葉も入れる</label>
+  </div>
+  <p class="muted" id="exInfo"></p>
+  <div class="row-btns">
+    <button class="main" id="exPdf">PDFにする</button>
+    <button id="exTxt">テキストで書き出す</button>
+    <button id="exCopy">テキストをコピー</button>
+  </div>
+  <p class="muted">PDF:印刷の画面が開くので、共有ボタン(□↑)から「"ファイル"に保存」やメールに。テキスト:メモ帳・Notion・AIに貼って使えます。</p>
+  <div class="row-btns"><button id="exClose">閉じる</button></div>
+</dialog>
+
+<div id="toast"></div>
+<!-- PDF用(印刷のときだけ表示) -->
+<div id="printArea"></div>
+
+<script>
+// 公開版(GitHub Pages)は Cloudflare の中継サーバーへ、Macの試作はこのページと同じ場所へ
+const DEFAULT_API = location.hostname.endsWith("github.io") ? "https://onsei-nikki.kinmon-push.workers.dev" : "";
+const $ = (id) => document.getElementById(id);
+const input = $("input");
+const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+const mark = (s) => esc(s).replace(/【要確認[^】]*】/g, (m) => `<span class="chk">${m}</span>`);
+const paras = (s) => s.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${mark(p).replace(/\n/g, "<br>")}</p>`).join("");
+
+// 書き方(サーバーの prompt/styles/<id>.md と同じ並び)
+// paid:有料版を作るときに、有料に切り分ける候補(今は全部使える)
+const STYLES = [
+  { id: "kuchou", name: "口調のまま" },
+  { id: "shousetsu", name: "小説風" },
+  { id: "rekkyo", name: "列挙" },
+  { id: "akutagawa", name: "芥川風", paid: true },
+  { id: "soseki", name: "漱石風", paid: true },
+  { id: "dazai", name: "太宰風", paid: true },
+];
+const styleName = (id) => STYLES.find((s) => s.id === id)?.name || id;
+// 書き方のボタンを並べる。made は作ってある書き方(まだのものは点線で表示)
+function styleButtons(el, current, made, onPick) {
+  el.innerHTML = "<span>書き方</span>" + STYLES.map((s) => `<button data-style="${s.id}" class="${s.id === current ? "on" : made.includes(s.id) ? "" : "new"}">${s.name}</button>`).join("");
+  el.onclick = (ev) => { const b = ev.target.closest("button[data-style]"); if (b && !b.classList.contains("on")) onPick(b.dataset.style); };
+}
+
+// ---- 小さな設定・書きかけ(localStorage)。使えない環境でも動くようにする ----
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+// 音声カルテ・音声メモと同じ住所(ryutaro16.github.io)で保存場所を共有するので、名前に「diary:」を付けて分ける。
+// 合言葉は同じなので、まだ入れていなければ音声メモ・音声カルテで入れたものを使う
+let settings = store.get("diary:settings") || { pass: store.get("memo:settings")?.pass || store.get("settings")?.pass || "", api: "" };
+// 書きかけ:話した内容・話し始めた日時・話し足す日・選んでいる書き方・書き方ごとに整えた日記と費用
+// 書き方は前回選んだものを使う
+const lastStyle = () => STYLES.some((s) => s.id === store.get("diary:style")) ? store.get("diary:style") : "kuchou";
+// stt・ai はこの書きかけで使った金額(文字起こし・整える)。保存するとその日の日記の金額に足す
+const emptyDraft = () => ({ input: "", startedAt: null, target: null, style: lastStyle(), results: {}, metas: {}, stt: 0, ai: 0 });
+let draft = { ...emptyDraft(), ...store.get("diary:draft") };
+// 書き方を付ける前の書きかけ(result 1つ)を引き継ぐ
+if (draft.result) { draft.results = { kuchou: draft.result }; draft.metas = { kuchou: draft.meta || "" }; draft.style = "kuchou"; delete draft.result; delete draft.meta; }
+const saveDraft = () => store.set("diary:draft", draft);
+
+// ---- 使った金額(推定)。使った月ごとに足していく。書きかけや日記を消しても残る ----
+// { "2026-10": { stt: 文字起こしの円, ai: 整えるの円, n: AIで整えた回数 } }
+const getCosts = () => store.get("diary:costs") || {};
+function addCost(kind, yen) {
+  if (!yen) return;
+  const c = getCosts(), d = new Date(), m = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const row = c[m] || { stt: 0, ai: 0, n: 0 };
+  row[kind] += yen;
+  if (kind === "ai") row.n++;
+  c[m] = row; store.set("diary:costs", c);
+}
+const yen = (n) => n < 10 ? n.toFixed(1) : Math.round(n).toLocaleString();
+
+// ---- 日記の保存(IndexedDB)。1日=1件、キーは「2026-10-29」 ----
+// { date, style(表示中の書き方), versions:{書き方:{title, body, needs_check}}, said:[{at, text}],
+//   marks:["fav"|"important"|"later"], cost:{stt, ai}(この日にかかった円), createdAt, updatedAt }
+// 書き方を付ける前の形({title, body, needs_check})は「口調のまま」として読む
+function normalize(e) {
+  if (!e) return e;
+  if (!e.versions) {
+    const { title, body, needs_check, ...rest } = e;
+    e = { ...rest, style: "kuchou", versions: { kuchou: { title: title || "", body: body || "", needs_check: needs_check || [] } } };
+  }
+  return { marks: [], cost: { stt: 0, ai: 0 }, ...e };
+}
+// 日記に付ける印
+const MARKS = [
+  { id: "fav", icon: "★", name: "お気に入り" },
+  { id: "important", icon: "❗", name: "重要" },
+  { id: "later", icon: "🔖", name: "後で見返す" },
+];
+const cur = (e) => e.versions[e.style] || Object.values(e.versions)[0];
+// その日に話した内容を全部まとめる(まだない書き方を作るとき)
+function saidText(saids) {
+  if (saids.length === 1) return saids[0].text;
+  return saids.map((s) => `(${hhmm(s.at)}に話した)\n${s.text}`).join("\n\n");
+}
+const db = new Promise((ok, ng) => {
+  const r = indexedDB.open("onsei-nikki", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("entries", { keyPath: "date" });
+  r.onsuccess = () => ok(r.result);
+  r.onerror = () => ng(r.error);
+});
+async function tx(mode, fn) {
+  const d = await db;
+  return new Promise((ok, ng) => {
+    const t = d.transaction("entries", mode);
+    const req = fn(t.objectStore("entries"));
+    t.oncomplete = () => ok(req?.result);
+    t.onerror = () => ng(t.error);
+  });
+}
+const getEntry = async (date) => normalize(await tx("readonly", (s) => s.get(date)));
+const putEntry = (e) => tx("readwrite", (s) => s.put(e));
+const delEntry = (date) => tx("readwrite", (s) => s.delete(date));
+const allEntries = async () => ((await tx("readonly", (s) => s.getAll())) || []).map(normalize).sort((a, b) => b.date.localeCompare(a.date));
+// iPhoneに「この保存は消さないで」と頼む(ホーム画面のアプリなら認められやすい)
+navigator.storage?.persist?.().catch(() => {});
+
+// ---- 日付 ----
+const WEEK = "日月火水木金土";
+const pad = (n) => String(n).padStart(2, "0");
+const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateOfKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+// 夜中0時〜朝4時に話したら、前の日の日記にする
+function diaryKey(ms) { const d = new Date(ms); if (d.getHours() < 4) d.setDate(d.getDate() - 1); return keyOf(d); }
+const aiDate = (k) => `${k}(${WEEK[dateOfKey(k).getDay()]})`;
+const aiSpoken = (ms) => { const d = new Date(ms); return `${aiDate(keyOf(d))} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const jpDate = (k) => { const d = dateOfKey(k); return `${d.getMonth() + 1}月${d.getDate()}日（${WEEK[d.getDay()]}）`; };
+const jpDateY = (k) => `${dateOfKey(k).getFullYear()}年${jpDate(k)}`;
+const hhmm = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+// 書きかけがどの日の日記か(話し足しの日 → 話し始めた日時 → 今)
+const targetKey = () => draft.target || diaryKey(draft.startedAt || Date.now());
+
+// ---- 画面の切り替え ----
+let view = "write", readKey = null;
+function show(v) {
+  view = v;
+  $("viewWrite").hidden = v !== "write"; $("viewList").hidden = v !== "list"; $("viewRead").hidden = v !== "read"; $("viewTopics").hidden = v !== "topics";
+  $("tabWrite").classList.toggle("on", v === "write"); $("tabList").classList.toggle("on", v === "list" || v === "read"); $("tabTopics").classList.toggle("on", v === "topics");
+  if (v === "write") renderWrite();
+  if (v === "list") renderList();
+  if (v === "read") renderRead();
+  if (v === "topics") renderTopics();
+  window.scrollTo(0, 0);
+}
+$("tabWrite").onclick = () => show("write");
+$("tabList").onclick = () => show("list");
+$("tabTopics").onclick = () => show("topics");
+$("back").onclick = () => show("list");
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 1600);
+}
+function setStatus(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = cls; }
+
+// ---- 話す画面 ----
+function grow(t) { if (!t.offsetWidth) return; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
+window.addEventListener("resize", () => { grow($("rBody")); grow($("eBody")); });
+
+async function renderWrite() {
+  const k = targetKey();
+  const existing = await getEntry(k);
+  $("writeHead").innerHTML = `${esc(jpDate(k))}の日記` + (k === diaryKey(Date.now()) ? "<small>今日</small>" : "");
+  // その日の日記がもうあれば、話した内容はそこに話し足す
+  $("addInfo").hidden = !existing;
+  $("addInfo").textContent = existing ? `この日の日記「${cur(existing).title}」に話し足します。前の日記に合わせて整え直します。` : "";
+  input.value = draft.input; $("count").textContent = draft.input.length + "字";
+  styleButtons($("writeStyles"), draft.style, Object.keys(draft.results), pickWriteStyle);
+  const r = draft.results[draft.style];
+  $("result").hidden = !r;
+  if (r) {
+    $("rTitle").value = r.title; $("rBody").value = r.body;
+    requestAnimationFrame(() => grow($("rBody")));
+    $("checks").hidden = !r.needs_check.length;
+    $("checks").innerHTML = r.needs_check.length ? `<b>確認してください(${r.needs_check.length}件)</b> 聞き間違いかもしれないところです。直してから保存してください。<ul>${r.needs_check.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+    $("meta").textContent = draft.metas[draft.style] || "";
+  }
+  $("run").disabled = recording || busy;
+}
+
+// 書き方を切り替える。もう日記にしたあとなら、その書き方でもすぐ整える(作ってあればそれを見せる)
+function pickWriteStyle(id) {
+  if (busy) return;
+  draft.style = id; store.set("diary:style", id); saveDraft();
+  setStatus("");
+  if (!draft.results[id] && Object.keys(draft.results).length && input.value.trim()) run();
+  else renderWrite();
+}
+
+async function post(path, body) {
+  let res;
+  try {
+    res = await fetch((settings.api || DEFAULT_API).replace(/\/$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Passphrase": settings.pass || "" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("サーバーにつながりません。通信状態と設定を確認してください");
+  }
+  const data = await res.json().catch(() => ({ error: `サーバーの応答を読めませんでした(${res.status})` }));
+  if (!res.ok || data.error) throw new Error(data.error || `エラー(${res.status})`);
+  return data;
+}
+
+let busy = false;
+async function withBusy(label, fn) {
+  if (busy) return;
+  busy = true; for (const id of ["run", "again", "save"]) $(id).disabled = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => setStatus(`${label}… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  setStatus(`${label}…`);
+  try { await fn(); }
+  catch (e) { setStatus(e.message, "err"); }
+  finally { clearInterval(tick); busy = false; for (const id of ["again", "save"]) $(id).disabled = false; if (view === "write") renderWrite(); if ($("status").className === "") setStatus(""); }
+}
+
+function run() {
+  const text = input.value.trim();
+  if (!text) { setStatus("話した内容がありません", "err"); return; }
+  const style = draft.style;
+  withBusy(`${styleName(style)}で日記に整えています`, async () => {
+    if (!draft.startedAt) draft.startedAt = Date.now();
+    const k = targetKey();
+    const old = await getEntry(k);
+    // その日の日記がこの書き方であれば、それに話し足す。なければ、その日に話した内容を全部まとめて整える
+    const req = { date: aiDate(k), spoken: aiSpoken(draft.startedAt), style, text, existing: "" };
+    if (old?.versions[style]) req.existing = old.versions[style].body;
+    else if (old) req.text = saidText([...old.said, { at: draft.startedAt, text }]);
+    const data = await post("/api/write", req);
+    draft.ai = (draft.ai || 0) + data.yen; addCost("ai", data.yen);
+    draft.results[style] = data.diary;
+    // 録音したときは、文字起こし(OpenAI)の費用も並べる
+    const stt = draft.stt ? `文字起こし 約${draft.stt.toFixed(1)}円＋` : "";
+    draft.metas[style] = `${stt}整える ${data.label} 約${data.yen.toFixed(1)}円(${data.sec.toFixed(1)}秒)`;
+    saveDraft();
+    setStatus("できました。読んで、よければ保存してください", "ok");
+  });
+}
+
+async function save() {
+  const title = $("rTitle").value.trim(), body = $("rBody").value.trim();
+  if (!body) { setStatus("日記が空です", "err"); return; }
+  const k = targetKey();
+  const old = await getEntry(k);
+  const now = Date.now();
+  draft.results[draft.style] = { ...draft.results[draft.style], title: title || "(タイトルなし)", body };
+  try {
+    await putEntry({
+      date: k, style: draft.style,
+      // 今回整えた書き方だけを残す(ほかの書き方は今回の話が入っていないので、読むときに作り直す)
+      versions: { ...draft.results },
+      // 元の話し言葉は、話し足すたびに積み重ねて残す
+      said: [...(old?.said || []), { at: draft.startedAt || now, text: draft.input.trim() }],
+      marks: old?.marks || [],
+      // 分野の抜き出しは、このあと話した内容全部から作り直す(やることのチェックは引き継ぐ)
+      topics: old?.topics,
+      cost: { stt: (old?.cost.stt || 0) + (draft.stt || 0), ai: (old?.cost.ai || 0) + (draft.ai || 0) },
+      createdAt: old?.createdAt || now, updatedAt: now,
+    });
+  } catch (e) {
+    setStatus("保存できませんでした:" + (e?.message || e), "err"); return;
+  }
+  draft = emptyDraft(); store.del("diary:draft");
+  failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
+  setStatus("");
+  toast("保存しました");
+  readKey = k; show("read");
+  updateTopics(k); // 待たない。失敗しても「分野」画面からあとで分けられる
+  pushDone(k);
+}
+
+function reset() {
+  if (recording) return;
+  draft = emptyDraft();
+  failed = []; queue = []; doneCount = 0; $("retryBtn").hidden = true;
+  store.del("diary:draft"); setStatus(""); renderWrite(); recInfo();
+}
+
+// ---- 録音(音声メモアプリと同じ作り)。無音でも止まらない。1分ごとに区切って文字起こしに送る ----
+const SEGMENT_MS = 60 * 1000;
+let recording = false, stream = null, recorder = null, segTimer = null, clock = null, wakeLock = null, recStart = 0;
+let queue = [], failed = [], sending = false, doneCount = 0, summarizeWhenDone = false;
+
+function pickType() {
+  for (const t of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"]) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+  return "";
+}
+const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+function recInfo() {
+  const parts = [];
+  if (recording) parts.push(`● 録音中 ${mmss(Date.now() - recStart)}`);
+  if (doneCount) parts.push(`文字にした区切り ${doneCount}本`);
+  if (sending || queue.length) parts.push("文字起こし中…");
+  if (failed.length) parts.push(`失敗 ${failed.length}本`);
+  $("recStatus").textContent = parts.length ? parts.join("・") : "黙っていても止まりません。止めると自動で文字にして日記に整えます。";
+}
+
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => { if (recording && document.visibilityState === "visible") keepAwake(); });
+
+function startSegment() {
+  const type = pickType();
+  const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const parts = [];
+  r.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+  r.onstop = () => { if (parts.length) { queue.push(new Blob(parts, { type: r.mimeType || type })); sendQueue(); } };
+  r.start();
+  recorder = r;
+}
+
+async function startRecording() {
+  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { setStatus("この画面では録音できません。Safariのタブで開いてください", "err"); return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch {
+    setStatus("マイクを使えませんでした。マイクの使用を許可してください", "err"); return;
+  }
+  recording = true; recStart = Date.now(); summarizeWhenDone = false;
+  if (!draft.startedAt) { draft.startedAt = recStart; saveDraft(); renderWrite(); }
+  $("recBtn").textContent = "■ 録音を止めて日記にする"; $("recBtn").classList.add("on");
+  $("run").disabled = true; setStatus("");
+  startSegment();
+  segTimer = setInterval(() => { recorder.stop(); startSegment(); }, SEGMENT_MS);
+  clock = setInterval(recInfo, 1000);
+  keepAwake(); recInfo();
+}
+
+function stopRecording() {
+  clearInterval(segTimer); clearInterval(clock);
+  recording = false; summarizeWhenDone = true;
+  recorder?.stop();
+  stream?.getTracks().forEach((t) => t.stop());
+  wakeLock?.release?.(); wakeLock = null;
+  $("recBtn").textContent = "● 録音を始める"; $("recBtn").classList.remove("on");
+  $("run").disabled = false;
+  recInfo(); maybeSummarize();
+}
+$("recBtn").onclick = () => (recording ? stopRecording() : startRecording());
+
+// 区切りを順番に送る。失敗したらそこで止めて、順番が入れ替わらないようにする
+async function sendQueue() {
+  if (sending || failed.length) return;
+  sending = true; recInfo();
+  while (queue.length) {
+    const blob = queue[0];
+    let data = null, err = "";
+    for (let i = 0; i < 3 && !data; i++) {
+      try {
+        const res = await fetch((settings.api || DEFAULT_API).replace(/\/$/, "") + "/api/transcribe", {
+          method: "POST", headers: { "Content-Type": blob.type.split(";")[0], "X-Passphrase": settings.pass || "" }, body: blob,
+        });
+        const d = await res.json().catch(() => ({ error: `サーバーの応答を読めませんでした(${res.status})` }));
+        if (!res.ok || d.error) { err = d.error || `エラー(${res.status})`; if (res.status < 500) break; }
+        else data = d;
+      } catch { err = "サーバーにつながりません"; }
+      if (!data && i < 2) await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+    }
+    queue.shift();
+    if (!data) { failed.push(blob, ...queue); queue = []; $("retryBtn").hidden = false; setStatus("文字起こしに失敗しました:" + err, "err"); break; }
+    if (data.text) {
+      // 一番下(最新の文字)を見ているときだけ、増えた文字に合わせて下へ送る。指で上に戻して読んでいるときは動かさない
+      const atBottom = input.scrollHeight - input.scrollTop - input.clientHeight < 40;
+      draft.input += (draft.input && !draft.input.endsWith("\n") ? "\n" : "") + data.text;
+      input.value = draft.input; $("count").textContent = draft.input.length + "字";
+      if (atBottom) input.scrollTop = input.scrollHeight;
+    }
+    doneCount++; draft.stt = (draft.stt || 0) + (data.yen || 0); addCost("stt", data.yen); saveDraft();
+    recInfo();
+  }
+  sending = false; recInfo(); maybeSummarize();
+}
+$("retryBtn").onclick = () => { queue = failed.concat(queue); failed = []; $("retryBtn").hidden = true; setStatus(""); sendQueue(); };
+
+// 録音を止めて、全部の区切りが文字になったら、そのまま日記に整える
+function maybeSummarize() {
+  if (summarizeWhenDone && !recording && !sending && !queue.length && !failed.length) {
+    summarizeWhenDone = false;
+    if (input.value.trim()) run(); else setStatus("聞き取れませんでした。もう一度録音してください", "err");
+  }
+}
+
+$("run").onclick = run;
+$("again").onclick = run;
+$("save").onclick = save;
+$("clear").onclick = () => {
+  if ((draft.input || Object.keys(draft.results).length) && !confirm("話した内容と整えた日記を消します。よろしいですか?(保存済みの日記は消えません)")) return;
+  reset();
+};
+input.addEventListener("input", () => {
+  // 話し始めた日時で、どの日の日記かを決める
+  if (!draft.startedAt && input.value) { draft.startedAt = Date.now(); renderWrite(); }
+  if (!input.value && !draft.target) draft.startedAt = null;
+  draft.input = input.value; $("count").textContent = input.value.length + "字"; saveDraft();
+});
+for (const id of ["rTitle", "rBody"]) {
+  $(id).addEventListener("input", (e) => {
+    if (e.target.tagName === "TEXTAREA") grow(e.target);
+    const r = draft.results[draft.style];
+    if (r) { draft.results[draft.style] = { ...r, title: $("rTitle").value, body: $("rBody").value }; saveDraft(); }
+  });
+}
+
+// ---- 一覧 ----
+const lastBackup = () => store.get("diary:lastBackup");
+let listFilter = "all"; // 印での絞り込み(all / fav / important / later)
+async function renderList() {
+  const all = await allEntries();
+  const q = $("search").value.trim();
+  // 印で絞り込むボタン(付いている日記の数も出す)
+  const count = (id) => all.filter((e) => e.marks.includes(id)).length;
+  $("filters").innerHTML = `<button data-f="all" class="${listFilter === "all" ? "on" : ""}">全部</button>`
+    + MARKS.map((m) => `<button data-f="${m.id}" class="${listFilter === m.id ? "on" : ""}">${m.icon}${m.name} ${count(m.id)}</button>`).join("");
+  let shown = listFilter === "all" ? all : all.filter((e) => e.marks.includes(listFilter));
+  // キーワード:どの書き方の日記・元の話し言葉でも探し、見つかった部分を出す
+  const found = new Map();
+  if (q) shown = shown.filter((e) => { const f = findIn(e, q); if (f) found.set(e.date, f); return !!f; });
+  let html = "";
+  // 1年前の今日
+  if (!q && listFilter === "all") {
+    const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+    const ago = all.find((e) => e.date === keyOf(d));
+    if (ago) html += `<div class="month">1年前の今日</div>${itemHtml(ago, "ago")}`;
+  }
+  if (q) html += `<div class="month">「${esc(q)}」が見つかった日記 ${shown.length}件</div>`;
+  let month = "";
+  for (const e of shown) {
+    const m = `${dateOfKey(e.date).getFullYear()}年${dateOfKey(e.date).getMonth() + 1}月`;
+    if (!q && m !== month) { month = m; html += `<div class="month">${m}</div>`; }
+    html += itemHtml(e, "", q, found.get(e.date));
+  }
+  const mk = MARKS.find((m) => m.id === listFilter);
+  if (!shown.length) html = `<div class="empty">${q ? "見つかりませんでした" : mk ? `${mk.name}の日記はまだありません。<br>日記を開いて「${mk.icon}${mk.name}」を押すと付きます。` : "まだ日記がありません。「話す」から今日のことを話してください。"}</div>`;
+  $("list").innerHTML = html;
+  // 最後の書き出しから30日たったら知らせる
+  const lb = lastBackup();
+  const due = all.length && (!lb || Date.now() - lb > 30 * 864e5);
+  $("backupNotice").hidden = !due;
+  $("backupNotice").innerHTML = due ? `<b>バックアップを書き出しましょう</b><br>${lb ? `最後の書き出しは${Math.floor((Date.now() - lb) / 864e5)}日前です。` : "まだ一度も書き出していません。"}日記はこのiPhoneの中だけにあります。<br><button id="noticeExport">今すぐ書き出す</button>` : "";
+  if (due) $("noticeExport").onclick = exportBackup;
+}
+function itemHtml(e, cls = "", q = "", snips = []) {
+  const v = cur(e);
+  const icons = MARKS.filter((m) => e.marks.includes(m.id)).map((m) => m.icon).join("");
+  const title = q ? highlight(v.title, q) : esc(v.title);
+  const first = v.body.split("\n").find((l) => l.trim() && !l.startsWith("■")) || "";
+  const sub = q ? snips.map((s) => `<span class="snip">${s}</span>`).join("") : `<small>${esc(first)}</small>`;
+  return `<button class="item ${cls}" data-key="${esc(e.date)}"><b>${icons ? `<span class="mk">${icons}</span>` : ""}<span>${esc(jpDate(e.date))}</span>${title}</b>${sub}</button>`;
+}
+
+// ---- キーワード検索 ----
+const lower = (s) => s.toLowerCase();
+// 見つかった言葉に印を付ける(英字は大文字・小文字を区別しない)
+function highlight(text, q) {
+  const L = lower(text), Q = lower(q);
+  let out = "", pos = 0, i;
+  while ((i = L.indexOf(Q, pos)) >= 0) { out += esc(text.slice(pos, i)) + `<mark>${esc(text.slice(i, i + q.length))}</mark>`; pos = i + q.length; }
+  return out + esc(text.slice(pos));
+}
+// 見つかった場所の前後を切り出す
+function snippet(text, q) {
+  const i = lower(text).indexOf(lower(q));
+  if (i < 0) return null;
+  const s = Math.max(0, i - 25), t = Math.min(text.length, i + q.length + 40);
+  return (s ? "…" : "") + highlight(text.slice(s, t).replace(/\s+/g, " "), q) + (t < text.length ? "…" : "");
+}
+// 表示中の書き方 → ほかの書き方 → 元の話し言葉 の順に探し、見つかった部分を2つまで返す(見つからなければ null)
+function findIn(e, q) {
+  const v = cur(e), out = [];
+  const add = (label, text) => { if (out.length < 2) { const s = snippet(text, q); if (s) out.push((label ? `<i>${label}</i> ` : "") + s); } };
+  add("", v.body);
+  if (!out.length) for (const [id, o] of Object.entries(e.versions)) if (o !== v) add(`(${styleName(id)})`, o.body);
+  if (!out.length) for (const s of e.said) add("(元の話し言葉)", s.text);
+  return out.length || lower(v.title).includes(lower(q)) ? out : null;
+}
+
+$("filters").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-f]"); if (b) { listFilter = b.dataset.f; renderList(); } });
+$("list").addEventListener("click", (ev) => { const b = ev.target.closest(".item"); if (b) { readKey = b.dataset.key; setReadStatus(""); show("read"); } });
+$("search").addEventListener("input", renderList);
+
+// ---- 1日分を読む・直す ----
+let readBusy = false;
+function setReadStatus(msg, cls = "") { const s = $("readStatus"); s.textContent = msg; s.className = cls; }
+let shownReadKey = null; // 別の日を開いたら、前の日のお知らせを消す
+async function renderRead() {
+  const e = await getEntry(readKey);
+  if (!e) { show("list"); return; }
+  if (shownReadKey !== readKey) { shownReadKey = readKey; if (!readBusy) setReadStatus(""); }
+  $("readEdit").hidden = true; $("readPaper").hidden = false; $("readBtns").hidden = false; $("readMarks").hidden = false;
+  styleButtons($("readStyles"), e.style, Object.keys(e.versions), pickReadStyle);
+  const v = cur(e);
+  const saids = e.said.map((s) => `<div class="said"><small>${esc(jpDate(diaryKey(s.at)) === jpDate(e.date) ? "" : jpDate(keyOf(new Date(s.at))) + " ")}${hhmm(s.at)} に話した</small>${esc(s.text)}</div>`).join("");
+  const c = e.cost, total = c.stt + c.ai;
+  const costLine = total ? `<div class="cost-line">この日にかかった金額 約${yen(total)}円(文字起こし ${yen(c.stt)}円＋整える ${yen(c.ai)}円)</div>` : "";
+  $("readPaper").innerHTML = `<div class="paper"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(v.title)}</div>${paras(v.body)}
+    <details><summary>元の話し言葉(${e.said.length}回分)</summary>${saids}</details>${costLine}</div>`;
+  $("readMarks").innerHTML = MARKS.map((m) => `<button data-mark="${m.id}" class="${e.marks.includes(m.id) ? "on" : ""}">${m.icon} ${m.name}</button>`).join("");
+}
+// 保存した日記の書き方を切り替える。まだ作っていない書き方は、その日に話した内容全部から作って残す
+async function pickReadStyle(id) {
+  if (readBusy) return;
+  const e = await getEntry(readKey);
+  if (e.versions[id]) { await putEntry({ ...e, style: id }); setReadStatus(""); renderRead(); return; }
+  if (!e.said.length) { setReadStatus("元の話し言葉がないので、この書き方は作れません", "err"); return; }
+  readBusy = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => setReadStatus(`${styleName(id)}で整えています… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  setReadStatus(`${styleName(id)}で整えています…`);
+  try {
+    const last = e.said[e.said.length - 1].at;
+    const data = await post("/api/write", { style: id, date: aiDate(e.date), spoken: aiSpoken(last), text: saidText(e.said), existing: "" });
+    addCost("ai", data.yen);
+    const now = await getEntry(readKey);
+    await putEntry({ ...now, style: id, versions: { ...now.versions, [id]: data.diary }, cost: { ...now.cost, ai: now.cost.ai + data.yen } });
+    clearInterval(tick);
+    setReadStatus(`${styleName(id)}を作りました(約${data.yen.toFixed(1)}円)。次からは切り替えるだけで読めます`);
+    if (view === "read" && readKey === now.date) renderRead();
+  } catch (err) {
+    clearInterval(tick);
+    setReadStatus(err.message, "err");
+  } finally { readBusy = false; }
+}
+// 印を付ける・外す
+$("readMarks").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-mark]");
+  if (!b) return;
+  const e = await getEntry(readKey), id = b.dataset.mark, on = !e.marks.includes(id);
+  await putEntry({ ...e, marks: on ? [...e.marks, id] : e.marks.filter((m) => m !== id), updatedAt: Date.now() });
+  const m = MARKS.find((x) => x.id === id);
+  toast(on ? `${m.icon}${m.name}にしました` : `${m.name}を外しました`);
+  renderRead();
+});
+$("edit").onclick = async () => {
+  const v = cur(await getEntry(readKey));
+  $("eTitle").value = v.title; $("eBody").value = v.body;
+  $("readPaper").hidden = true; $("readBtns").hidden = true; $("readMarks").hidden = true; $("readEdit").hidden = false;
+  requestAnimationFrame(() => grow($("eBody")));
+};
+$("eBody").addEventListener("input", (e) => grow(e.target));
+$("eCancel").onclick = renderRead;
+// 表示している書き方の日記だけを直す
+$("eSave").onclick = async () => {
+  const e = await getEntry(readKey);
+  const v = cur(e);
+  const fixed = { ...v, title: $("eTitle").value.trim() || v.title, body: $("eBody").value.trim() || v.body };
+  await putEntry({ ...e, versions: { ...e.versions, [e.style]: fixed }, updatedAt: Date.now() });
+  toast("保存しました"); renderRead();
+};
+$("addMore").onclick = async () => {
+  if ((draft.input || Object.keys(draft.results).length) && targetKey() !== readKey && !confirm("書きかけの話した内容があります。消して、この日の日記に話し足しますか?")) return;
+  if (targetKey() !== readKey) draft = emptyDraft();
+  // 話し足しは、いま読んでいる書き方で整える
+  draft.target = readKey; draft.style = (await getEntry(readKey)).style; saveDraft();
+  setReadStatus("");
+  show("write");
+};
+$("del").onclick = async () => {
+  if (!confirm(`${jpDate(readKey)}の日記を消します。元に戻せません。よろしいですか?`)) return;
+  await delEntry(readKey); toast("消しました"); show("list");
+};
+
+// ---- バックアップ(書き出し・読み込み) ----
+async function exportBackup() {
+  const all = await allEntries();
+  if (!all.length) { toast("まだ日記がありません"); return; }
+  const name = `音声日記-バックアップ-${keyOf(new Date()).replace(/-/g, "")}.json`;
+  const file = new File([JSON.stringify({ app: "onsei-nikki", version: 2, exportedAt: new Date().toISOString(), entries: all, costs: getCosts() }, null, 1)], name, { type: "application/json" });
+  // iPhoneは共有シートで「ファイルに保存」できる。使えなければダウンロード
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); }
+    catch (e) { if (e.name === "AbortError") return; toast("書き出せませんでした"); return; }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  store.set("diary:lastBackup", Date.now());
+  toast(`${all.length}日分を書き出しました`);
+  renderBackupInfo(); if (view === "list") renderList();
+}
+async function importBackup(f) {
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { toast("読めないファイルです"); return; }
+  if (data?.app !== "onsei-nikki" || !Array.isArray(data.entries)) { toast("音声日記のバックアップではありません"); return; }
+  // 同じ日の日記があれば、新しく直したほうを残す
+  let added = 0, kept = 0;
+  for (const raw of data.entries) {
+    // 書き方を付ける前のバックアップ(version 1)も読めるようにそろえる
+    const e = normalize(raw);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e?.date) || !e.versions || typeof cur(e)?.body !== "string") continue;
+    const here = await getEntry(e.date);
+    if (here && (here.updatedAt || 0) >= (e.updatedAt || 0)) { kept++; continue; }
+    const versions = {};
+    for (const s of STYLES) {
+      const v = e.versions[s.id];
+      if (v && typeof v.body === "string") versions[s.id] = { title: String(v.title || ""), body: v.body, needs_check: Array.isArray(v.needs_check) ? v.needs_check : [] };
+    }
+    if (!Object.keys(versions).length) continue;
+    const marks = Array.isArray(e.marks) ? e.marks.filter((m) => MARKS.some((x) => x.id === m)) : [];
+    const cost = { stt: Number(e.cost?.stt) || 0, ai: Number(e.cost?.ai) || 0 };
+    const topics = Array.isArray(e.topics?.items)
+      ? { items: e.topics.items.filter((i) => i && typeof i.text === "string").map((i) => ({ cat: String(i.cat || ""), text: i.text, done: !!i.done })), from: Number(e.topics.from) || 0 }
+      : undefined;
+    await putEntry({ date: e.date, style: versions[e.style] ? e.style : Object.keys(versions)[0], versions, said: e.said || [], marks, topics, cost, createdAt: e.createdAt || Date.now(), updatedAt: e.updatedAt || Date.now() });
+    added++;
+  }
+  // 使った金額は、このiPhoneに記録がない月だけ引き継ぐ(二重に数えない)
+  if (data.costs && typeof data.costs === "object") {
+    const c = getCosts();
+    for (const [m, r] of Object.entries(data.costs)) if (/^\d{4}-\d{2}$/.test(m) && !c[m]) c[m] = { stt: Number(r.stt) || 0, ai: Number(r.ai) || 0, n: Number(r.n) || 0 };
+    store.set("diary:costs", c);
+  }
+  toast(`${added}日分を読み込みました${kept ? `(${kept}日分はこのiPhoneのほうが新しいので残しました)` : ""}`);
+  if (view === "list") renderList();
+}
+async function renderBackupInfo() {
+  const n = (await allEntries()).length, lb = lastBackup();
+  const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  $("backupInfo").textContent = `日記 ${n}日分/最後の書き出し:${lb ? new Date(lb).toLocaleDateString("ja-JP") : "まだ"}${persisted ? "/消さない設定:済み" : ""}`;
+}
+// ---- 分野ごとの抜き出し ----
+// entry.topics = { items:[{cat, text, done}], from:何回分の話し言葉から作ったか }
+const DEFAULT_CATS = ["プライベート", "子ども", "仕事", "将来の夢", "やること"];
+const getCats = () => { const c = store.get("diary:categories"); return Array.isArray(c) && c.length ? c : DEFAULT_CATS; };
+const isTodo = (c) => c === "やること";
+const needsTopics = (e) => e.said.length > 0 && (!e.topics || e.topics.from < e.said.length);
+const topicsBusy = new Set();
+// その日に話した内容全部から、分野ごとの抜き出しを作る。成功で true、失敗でエラーの文
+async function updateTopics(k) {
+  if (topicsBusy.has(k)) return true;
+  topicsBusy.add(k);
+  try {
+    const e = await getEntry(k);
+    if (!e?.said.length) return true;
+    const data = await post("/api/topics", { date: aiDate(k), text: saidText(e.said), categories: getCats() });
+    addCost("ai", data.yen);
+    const now = await getEntry(k);
+    // やることのチェックは、同じ文ならそのまま引き継ぐ
+    const doneTexts = new Set((now.topics?.items || []).filter((i) => i.done).map((i) => i.text));
+    const items = data.items.map((i) => ({ cat: i.category, text: i.text, done: doneTexts.has(i.text) }));
+    await putEntry({ ...now, topics: { items, from: now.said.length }, cost: { ...now.cost, ai: now.cost.ai + data.yen } });
+    if (view === "topics") renderTopics();
+    return true;
+  } catch (err) {
+    return err.message;
+  } finally { topicsBusy.delete(k); }
+}
+
+let curCat = null;
+async function renderTopics() {
+  const cats = getCats();
+  if (!cats.includes(curCat)) curCat = cats[0];
+  const all = await allEntries();
+  const items = all.flatMap((e) => (e.topics?.items || []).map((it, idx) => ({ ...it, date: e.date, idx })));
+  const cnt = (c) => items.filter((i) => i.cat === c && !(isTodo(c) && i.done)).length;
+  $("catBtns").innerHTML = cats.map((c) => `<button data-cat="${esc(c)}" class="${c === curCat ? "on" : ""}">${esc(c)} ${cnt(c)}</button>`).join("");
+  // まだ分野に分けていない日記(保存したときに失敗した・話し足した・これまでの日記)
+  const pending = all.filter(needsTopics);
+  $("topicsPending").hidden = !pending.length;
+  if (pending.length && !backfilling) $("topicsPending").innerHTML = `まだ分野に分けていない日記が<b>${pending.length}日分</b>あります(1日 約1〜2円)。<br><button id="topicsAll">AIで分ける</button>`;
+  // まとめ(前に作ったものがあれば出す)
+  renderSummary();
+  // 抜き出しの一覧(新しい日から)。やることは、終わったものを下にたたむ
+  const mine = items.filter((i) => i.cat === curCat).sort((a, b) => b.date.localeCompare(a.date) || a.idx - b.idx);
+  const block = (list) => {
+    let html = "", day = "";
+    for (const i of list) {
+      if (i.date !== day) { day = i.date; html += `<div class="topic-day"><button data-open="${i.date}">${esc(jpDate(i.date))} ›</button></div>`; }
+      const box = isTodo(curCat) ? `<input type="checkbox" data-date="${i.date}" data-idx="${i.idx}" ${i.done ? "checked" : ""} aria-label="終わった">` : "";
+      html += `<div class="topic ${i.done && isTodo(curCat) ? "done" : ""}">${box}<span>${esc(i.text)}</span></div>`;
+    }
+    return html;
+  };
+  let html;
+  if (!mine.length) html = `<div class="empty">「${esc(curCat)}」の記録はまだありません。<br>日記を保存すると、AIが自動で分野に分けます。</div>`;
+  else if (isTodo(curCat)) {
+    const open = mine.filter((i) => !i.done), done = mine.filter((i) => i.done);
+    html = (open.length ? block(open) : `<div class="empty">やることは全部終わっています</div>`)
+      + (done.length ? `<details class="done-list"><summary>終わったもの ${done.length}件</summary>${block(done)}</details>` : "");
+  } else html = block(mine);
+  $("topicList").innerHTML = html;
+}
+$("catBtns").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-cat]"); if (b) { curCat = b.dataset.cat; $("sumStatus").textContent = ""; renderTopics(); } });
+$("topicList").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-open]"); if (b) { readKey = b.dataset.open; show("read"); } });
+// やることのチェック
+$("topicList").addEventListener("change", async (ev) => {
+  const c = ev.target.closest("input[data-idx]");
+  if (!c) return;
+  const e = await getEntry(c.dataset.date), idx = Number(c.dataset.idx);
+  const items = e.topics.items.map((it, i) => (i === idx ? { ...it, done: c.checked } : it));
+  await putEntry({ ...e, topics: { ...e.topics, items } });
+  toast(c.checked ? "終わったものにしました" : "まだのものに戻しました");
+  renderTopics();
+});
+// まだ分けていない日記を、古い順に1日ずつ分ける
+let backfilling = false;
+$("topicsPending").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#topicsAll") || backfilling) return;
+  backfilling = true;
+  const pending = (await allEntries()).filter(needsTopics).reverse();
+  let ok = 0, err = "";
+  for (const [n, e] of pending.entries()) {
+    $("topicsPending").textContent = `分けています… ${n + 1}/${pending.length}日分`;
+    const r = await updateTopics(e.date);
+    if (r === true) ok++; else { err = r; break; }
+  }
+  backfilling = false;
+  toast(err ? `${ok}日分を分けました。止まりました:${err}` : `${ok}日分を分けました`);
+  renderTopics();
+});
+
+// ---- 分野のまとめ(AI) ----
+// まとめる期間 → [始まりの日, 終わりの日, 表示名]
+function periodRange(p) {
+  const d = new Date(), y = d.getFullYear(), m = d.getMonth(), today = keyOf(d);
+  if (p === "month") return [keyOf(new Date(y, m, 1)), today, `${y}年${m + 1}月`];
+  if (p === "lastmonth") { const s = new Date(y, m - 1, 1); return [keyOf(s), keyOf(new Date(y, m, 0)), `${s.getFullYear()}年${s.getMonth() + 1}月`]; }
+  if (p === "3months") { const s = new Date(y, m - 2, 1); return [keyOf(s), today, `${s.getFullYear()}年${s.getMonth() + 1}月〜${y}年${m + 1}月`]; }
+  return ["0000-00-00", "9999-99-99", "これまで全部"];
+}
+const sumKey = () => `${curCat}|${$("sumPeriod").value}`;
+function renderSummary() {
+  const s = (store.get("diary:summaries") || {})[sumKey()];
+  $("sumOut").innerHTML = s ? `<div class="t">${esc(s.title)}</div><div class="body">${esc(s.body)}</div>
+    <div class="meta">${esc(s.label)}・記録${s.n}件から・${new Date(s.at).toLocaleDateString("ja-JP")}に作成(約${yen(s.yen)}円) <button class="link" id="sumCopy">コピー</button></div>` : "";
+  $("sumRun").textContent = s ? "AIでまとめ直す" : "AIでまとめる";
+}
+$("sumPeriod").onchange = () => { $("sumStatus").textContent = ""; renderSummary(); };
+$("sumOut").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#sumCopy")) return;
+  const s = (store.get("diary:summaries") || {})[sumKey()];
+  try { await navigator.clipboard.writeText(`${s.title}\n${s.body}`); toast("コピーしました"); } catch { toast("コピーできませんでした"); }
+});
+let sumBusy = false;
+$("sumRun").onclick = async () => {
+  if (sumBusy) return;
+  const [from, to, label] = periodRange($("sumPeriod").value), cat = curCat, key = sumKey();
+  const all = await allEntries();
+  const items = all.filter((e) => e.date >= from && e.date <= to).reverse()
+    .flatMap((e) => (e.topics?.items || []).filter((i) => i.cat === cat && !(isTodo(cat) && i.done)).map((i) => ({ date: aiDate(e.date), text: i.text })));
+  if (!items.length) { $("sumStatus").textContent = `${label}の「${cat}」の記録がありません`; return; }
+  sumBusy = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => ($("sumStatus").textContent = `まとめています… ${Math.round((Date.now() - t0) / 1000)}秒`), 500);
+  try {
+    const data = await post("/api/summary", { category: cat, period: label, items });
+    addCost("ai", data.yen);
+    const all2 = store.get("diary:summaries") || {};
+    all2[key] = { ...data.summary, label, n: items.length, at: Date.now(), yen: data.yen };
+    store.set("diary:summaries", all2);
+    $("sumStatus").textContent = "";
+    if (view === "topics" && sumKey() === key) renderSummary();
+  } catch (e) {
+    $("sumStatus").textContent = e.message;
+  } finally { clearInterval(tick); sumBusy = false; }
+};
+
+// ---- 日記の書き出し(PDF・テキスト) ----
+function openExport() {
+  $("exCat").innerHTML = getCats().map((c) => `<option>${esc(c)}</option>`).join("");
+  $("exStyle").innerHTML = `<option value="">それぞれ表示中の書き方</option>` + STYLES.map((s) => `<option value="${s.id}">${s.name}</option>`).join("");
+  const d = new Date();
+  if (!$("exTo").value) $("exTo").value = keyOf(d);
+  if (!$("exFrom").value) $("exFrom").value = keyOf(new Date(d.getFullYear(), d.getMonth(), 1));
+  exChanged();
+  $("exportDlg").showModal();
+}
+// 選んだ範囲の中身を集める
+async function gatherExport() {
+  const r = $("exRange").value, all = (await allEntries()).reverse(); // 古い順(本のように読む)
+  if (r === "cat") {
+    const cat = $("exCat").value;
+    const days = all.map((e) => ({ date: e.date, items: (e.topics?.items || []).filter((i) => i.cat === cat) })).filter((d) => d.items.length);
+    return { kind: "topics", label: `分野「${cat}」`, days, cat };
+  }
+  let list = all, label = "全部の日記";
+  if (r === "period") {
+    const f = $("exFrom").value, t = $("exTo").value;
+    list = all.filter((e) => (!f || e.date >= f) && (!t || e.date <= t));
+    label = `${f ? jpDateY(f) : ""}〜${t ? jpDateY(t) : ""}`;
+  } else if (r.startsWith("mark:")) {
+    const m = MARKS.find((x) => x.id === r.slice(5));
+    list = all.filter((e) => e.marks.includes(m.id));
+    label = `${m.icon}${m.name}の日記`;
+  }
+  return { kind: "diary", label, list, style: $("exStyle").value, said: $("exSaid").checked };
+}
+// 書き方を選んでいても、その日にまだその書き方がなければ表示中の書き方を使う
+const versionFor = (e, style) => (style && e.versions[style]) || cur(e);
+async function exChanged() {
+  const r = $("exRange").value;
+  $("exPeriodBox").hidden = r !== "period"; $("exCatBox").hidden = r !== "cat"; $("exStyleBox").hidden = r === "cat";
+  const g = await gatherExport();
+  const n = g.kind === "topics" ? g.days.length : g.list.length;
+  const miss = g.kind === "diary" && g.style ? g.list.filter((e) => !e.versions[g.style]).length : 0;
+  $("exInfo").textContent = `${n}日分` + (miss ? `(うち${miss}日分は${styleName(g.style)}をまだ作っていないので、表示中の書き方で入れます)` : "");
+}
+for (const id of ["exRange", "exFrom", "exTo", "exCat", "exStyle"]) $(id).addEventListener("change", exChanged);
+function exportText(g) {
+  const line = "――――――――――――";
+  let t = `音声日記 ${g.label}\n(${new Date().toLocaleDateString("ja-JP")} 書き出し)\n\n`;
+  if (g.kind === "topics") {
+    for (const d of g.days) t += `${jpDateY(d.date)}\n${d.items.map((i) => `・${i.text}${isTodo(g.cat) && i.done ? "(済)" : ""}`).join("\n")}\n\n`;
+    return t;
+  }
+  for (const e of g.list) {
+    const v = versionFor(e, g.style);
+    t += `${line}\n${jpDateY(e.date)}　${v.title}\n\n${v.body.trim()}\n`;
+    if (g.said) t += `\n【元の話し言葉】\n${e.said.map((s) => `(${hhmm(s.at)})${s.text}`).join("\n")}\n`;
+    t += "\n";
+  }
+  return t;
+}
+function exportHtml(g) {
+  let h = `<h1>音声日記 ${esc(g.label)}</h1>`;
+  if (g.kind === "topics") {
+    for (const d of g.days) h += `<div class="pd"><div class="d">${esc(jpDateY(d.date))}</div><ul>${d.items.map((i) => `<li>${esc(i.text)}${isTodo(g.cat) && i.done ? "(済)" : ""}</li>`).join("")}</ul></div>`;
+    return h;
+  }
+  for (const e of g.list) {
+    const v = versionFor(e, g.style);
+    h += `<div class="pd"><div class="d">${esc(jpDateY(e.date))}</div><div class="t">${esc(v.title)}</div>${paras(v.body)}`;
+    if (g.said) h += e.said.map((s) => `<div class="said">(${hhmm(s.at)}に話した)\n${esc(s.text)}</div>`).join("");
+    h += `</div>`;
+  }
+  return h;
+}
+async function withExport(fn) {
+  const g = await gatherExport();
+  if ((g.kind === "topics" ? g.days : g.list).length === 0) { toast("書き出す日記がありません"); return; }
+  await fn(g);
+}
+$("exPdf").onclick = () => withExport((g) => {
+  $("printArea").innerHTML = exportHtml(g);
+  $("exportDlg").close();
+  document.body.classList.add("printing");
+  window.addEventListener("afterprint", () => document.body.classList.remove("printing"), { once: true });
+  setTimeout(() => window.print(), 50);
+});
+$("exTxt").onclick = () => withExport(async (g) => {
+  const name = `音声日記-${keyOf(new Date()).replace(/-/g, "")}.txt`;
+  const file = new File([exportText(g)], name, { type: "text/plain" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); } catch (e) { if (e.name !== "AbortError") toast("書き出せませんでした"); return; }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  toast("書き出しました");
+});
+$("exCopy").onclick = () => withExport(async (g) => {
+  try { await navigator.clipboard.writeText(exportText(g)); toast("コピーしました"); } catch { toast("コピーできませんでした"); }
+});
+$("openExport").onclick = openExport;
+$("exClose").onclick = () => $("exportDlg").close();
+
+// ---- リマインド通知(筋モンと同じ仕組み。通知サーバーは中継サーバーの /api/push/*) ----
+// 送るのは ランダムな番号・通知の宛先・知らせる時刻・時差・最後に日記を書いた日 だけ(日記の中身は送らない)
+const VAPID_PUBLIC = "BLLQQkwzX5ZgDjwmSb4VRuhxWf2opX21OQNtAsabA-dh0c8FKKnlOiB22A2LwUEJnaxEOq1Gofdthu1Hr8RBcsg";
+const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+const tzMin = () => -new Date().getTimezoneOffset();
+const pushReady = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const standalone = () => navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+// 通知の設定:{ on, remind:"22:00", id }
+const getPush = () => ({ on: false, remind: "22:00", ...store.get("diary:push") });
+const setPush = (p) => store.set("diary:push", p);
+function pushId() {
+  let p = getPush();
+  if (!p.id) { p.id = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join(""); setPush(p); }
+  return p.id;
+}
+// 今日(日記の日)の日記があれば、その日付
+async function todayDone() { const k = diaryKey(Date.now()); return (await getEntry(k)) ? k : ""; }
+function renderPush() {
+  const p = getPush();
+  $("remind").value = p.remind;
+  $("pushBtns").innerHTML = p.on
+    ? `<button class="main" id="pushTest">テスト通知を送る</button><button id="pushOff">通知を止める</button>`
+    : `<button class="main" id="pushOn">通知を受け取る</button>`;
+  $("pushInfo").textContent = p.on
+    ? `毎日 ${p.remind} に、その日の日記がまだなら1回だけ知らせます。時刻を変えたら上の「保存」を押してください。`
+    : standalone() ? "押すと「通知を許可」の確認が出ます。" : "iPhoneでは、ホーム画面に追加した音声日記から開いて押してください(Safariのタブでは通知を受け取れません)。";
+}
+async function pushOn() {
+  if (!pushReady()) { toast(standalone() ? "この端末では通知を受け取れません" : "ホーム画面に追加した音声日記から開いてください"); return; }
+  try {
+    if ((await Notification.requestPermission()) !== "granted") { toast("通知が許可されませんでした(iPhoneの設定→通知→音声日記 で変えられます)"); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(VAPID_PUBLIC) }));
+    const remind = $("remind").value || "22:00";
+    await post("/api/push/subscribe", { id: pushId(), sub: sub.toJSON(), remind, tz: tzMin(), lastDone: await todayDone() });
+    setPush({ ...getPush(), on: true, remind });
+    toast(`毎日 ${remind} に知らせます`);
+  } catch (e) { toast("通知を登録できませんでした:" + e.message); }
+  renderPush();
+}
+async function pushOff() {
+  try { await post("/api/push/unsubscribe", { id: pushId() }); } catch { /* サーバーに残っても、宛先が消えれば送られない */ }
+  try { await (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.unsubscribe(); } catch {}
+  setPush({ ...getPush(), on: false });
+  toast("通知を止めました"); renderPush();
+}
+$("pushBtns").addEventListener("click", async (ev) => {
+  const id = ev.target.closest("button")?.id;
+  if (id === "pushOn") pushOn();
+  if (id === "pushOff") pushOff();
+  if (id === "pushTest") { try { await post("/api/push/test", { id: pushId() }); toast("送りました。数秒で届けば準備OK"); } catch (e) { toast(e.message); } }
+});
+// 時刻を変えたら通知サーバーにも伝える(設定の「保存」から呼ぶ)
+async function pushSettings() {
+  const p = getPush(), remind = $("remind").value || p.remind;
+  setPush({ ...p, remind });
+  if (p.on && remind !== p.remind) { try { await post("/api/push/settings", { id: pushId(), remind, tz: tzMin() }); } catch (e) { toast("通知の時刻を変えられませんでした:" + e.message); } }
+}
+// 日記を保存したら「今日は書いた」と伝える(今日の分のときだけ。失敗しても次の保存でまた送る)
+async function pushDone(k) {
+  if (!getPush().on || k !== diaryKey(Date.now())) return;
+  try { await post("/api/push/done", { id: pushId(), d: k }); } catch {}
+}
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+// 使った金額:今月・合計と、月ごとの内訳
+function renderCostInfo() {
+  const c = getCosts(), months = Object.keys(c).sort().reverse();
+  if (!months.length) { $("costInfo").innerHTML = `<p class="muted">まだありません</p>`; return; }
+  const d = new Date(), now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const sum = (r) => r.stt + r.ai;
+  const total = months.reduce((a, m) => a + sum(c[m]), 0);
+  const n = months.reduce((a, m) => a + c[m].n, 0);
+  $("costInfo").innerHTML = `<p style="margin:6px 0">今月 <b>約${yen(c[now] ? sum(c[now]) : 0)}円</b> ・ これまでの合計 <b>約${yen(total)}円</b>(整えた回数 ${n}回)</p>
+    <table class="cost-table"><tr><th>月</th><th>文字起こし</th><th>整える</th><th>合計</th></tr>
+    ${months.map((m) => `<tr><td>${Number(m.slice(0, 4))}年${Number(m.slice(5))}月</td><td>${yen(c[m].stt)}円</td><td>${yen(c[m].ai)}円</td><td>${yen(sum(c[m]))}円</td></tr>`).join("")}</table>`;
+}
+$("exportBtn").onclick = exportBackup;
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
+
+$("openSettings").onclick = () => { $("pass").value = settings.pass || ""; $("api").value = settings.api || ""; $("cats").value = getCats().join("、"); renderPush(); renderCostInfo(); renderBackupInfo(); $("settings").showModal(); };
+$("closeSettings").onclick = () => $("settings").close();
+$("saveSettings").onclick = () => {
+  settings = { pass: $("pass").value, api: $("api").value.trim() }; store.set("diary:settings", settings);
+  // 分野:同じ名前は1つに、12字・10個まで(サーバーと同じ決まり)
+  const cats = [...new Set($("cats").value.split(/[、,，\n]+/).map((c) => c.trim()).filter((c) => c && c.length <= 12))].slice(0, 10);
+  if (cats.length) store.set("diary:categories", cats);
+  pushSettings();
+  $("settings").close(); toast("保存しました");
+  if (view === "topics") renderTopics();
+};
+
+show("write");
+</script>
+</body>
+</html>
